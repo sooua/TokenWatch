@@ -9,6 +9,8 @@ export interface AppSettings {
   customTokenLimit?: number;
   menuBarDisplayMode: 'percentage' | 'cost' | 'alternate';
   menuBarCostSource: 'today' | 'sessionWindow';
+  launchOnStartup: boolean;
+  standaloneWindow: boolean;
 }
 
 export class SettingsService {
@@ -31,6 +33,8 @@ export class SettingsService {
       customTokenLimit: undefined,
       menuBarDisplayMode: 'alternate',
       menuBarCostSource: 'today',
+      launchOnStartup: false,
+      standaloneWindow: false,
     };
 
     // Ensure settings directory exists

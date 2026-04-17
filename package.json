@@ -5,12 +5,14 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "webpack --mode development --watch --progress && electron .",
+    "dev": "concurrently -k -n webpack,tsc-main,tsc-preload \"webpack --mode development --watch --progress\" \"tsc --project tsconfig.main.json --watch --preserveWatchOutput\" \"tsc --project tsconfig.preload.json --watch --preserveWatchOutput\"",
     "build": "webpack --mode production && tsc --project tsconfig.main.json && tsc --project tsconfig.preload.json",
-    "electron-dev": "concurrently \"npm run dev\" \"wait-on dist/bundle.js && electron .\"",
+    "electron-dev": "concurrently -k \"npm run dev\" \"wait-on dist/bundle.js dist/main.js dist/preload.js && electron .\"",
     "pack": "electron-builder",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "make-ico": "node scripts/make-ico.mjs",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format --write ./src",
@@ -18,7 +20,8 @@
     "check": "biome check ./src",
     "check:fix": "biome check --write ./src",
     "type-check": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "patch-package"
   },
   "keywords": [
     "electron",
@@ -50,6 +53,8 @@
     "electron-builder": "^26.0.12",
     "html-webpack-plugin": "^5.6.4",
     "husky": "^9.1.7",
+    "patch-package": "^8.0.1",
+    "png-to-ico": "^3.0.1",
     "postcss-loader": "^8.2.0",
     "style-loader": "^4.0.0",
     "tailwindcss": "^3.4.17",

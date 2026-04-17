@@ -1,0 +1,92 @@
+diff --git a/node_modules/ccusage/dist/data-loader-D0RyE7VE.js b/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
+index af630f6..a505fb5 100644
+--- a/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
++++ b/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
+@@ -4682,6 +4682,31 @@ var LiteLLMPricingFetcher = class {
+ 		}));
+ 	}
+ 	async ensurePricingLoaded() {
++		// [ccseva-patch] Disk-cached pricing: skip the LiteLLM network fetch
++		// (typically 1-5s) on every cold start when a recent copy is available
++		// at ~/.ccseva/pricing-cache.json. 24h TTL keeps the data fresh.
++		if (this.cachedPricing == null && !this.offline) {
++			try {
++				const __ccsevaCachePath = path.join(homedir(), ".ccseva", "pricing-cache.json");
++				if (nativeFs.existsSync(__ccsevaCachePath)) {
++					const __ccsevaRaw = nativeFs.readFileSync(__ccsevaCachePath, "utf8");
++					const __ccsevaParsed = JSON.parse(__ccsevaRaw);
++					const __ccsevaAge = Date.now() - (__ccsevaParsed && typeof __ccsevaParsed.savedAt === "number" ? __ccsevaParsed.savedAt : 0);
++					if (Array.isArray(__ccsevaParsed?.entries) && __ccsevaAge < 24 * 60 * 60 * 1000) {
++						const __ccsevaMap = new Map();
++						for (const __ccsevaItem of __ccsevaParsed.entries) {
++							if (Array.isArray(__ccsevaItem) && __ccsevaItem.length === 2) __ccsevaMap.set(__ccsevaItem[0], __ccsevaItem[1]);
++						}
++						if (__ccsevaMap.size > 0) {
++							this.cachedPricing = __ccsevaMap;
++							this.logger.info(`Loaded pricing for ${__ccsevaMap.size} models from disk cache`);
++						}
++					}
++				}
++			} catch (__ccsevaError) {
++				this.logger.debug("Failed to load pricing disk cache:", __ccsevaError);
++			}
++		}
+ 		return pipe(this.cachedPricing != null ? succeed(this.cachedPricing) : fail(/* @__PURE__ */ new Error("Cached pricing not available")), orElse(async () => {
+ 			if (this.offline) return this.loadOfflinePricing();
+ 			this.logger.warn("Fetching latest model pricing from LiteLLM...");
+@@ -4706,6 +4731,18 @@ var LiteLLMPricingFetcher = class {
+ 			}), inspect((pricing) => {
+ 				this.cachedPricing = pricing;
+ 				this.logger.info(`Loaded pricing for ${pricing.size} models`);
++				// [ccseva-patch] Persist to disk cache so the next cold start
++				// can skip the network round-trip entirely.
++				try {
++					const __ccsevaDir = path.join(homedir(), ".ccseva");
++					if (!nativeFs.existsSync(__ccsevaDir)) nativeFs.mkdirSync(__ccsevaDir, { recursive: true });
++					const __ccsevaCachePath = path.join(__ccsevaDir, "pricing-cache.json");
++					const __ccsevaEntries = [];
++					pricing.forEach((v, k) => __ccsevaEntries.push([k, v]));
++					nativeFs.writeFileSync(__ccsevaCachePath, JSON.stringify({ savedAt: Date.now(), entries: __ccsevaEntries }), "utf8");
++				} catch (__ccsevaError) {
++					this.logger.debug("Failed to persist pricing disk cache:", __ccsevaError);
++				}
+ 			}), orElse(async (error) => this.handleFallbackToCachedPricing(error)));
+ 		}));
+ 	}
+@@ -5956,12 +5993,24 @@ async function loadSessionBlockData(options) {
+ 			allFiles.push(...files);
+ 		}
+ 		if (allFiles.length === 0) return [];
+-		const sortedFiles = await sortFilesByTimestamp(filterByProject(allFiles, (filePath) => extractProjectFromPath(filePath), options?.project));
++		// [ccseva-patch] Skip the pre-read file sort. `sortFilesByTimestamp`
++		// opens and streams every JSONL file just to find its earliest timestamp,
++		// doubling cold-start I/O. `identifySessionBlocks` already sorts entries
++		// by timestamp internally (see its call to `entries.sort(...)`), so the
++		// file processing order has no effect on the final result.
++		const sortedFiles = filterByProject(allFiles, (filePath) => extractProjectFromPath(filePath), options?.project);
+ 		const mode = options?.mode ?? "auto";
+ 		const fetcher = _usingCtx6.u(mode === "display" ? null : new PricingFetcher(options?.offline));
+ 		const processedHashes = /* @__PURE__ */ new Set();
+ 		const allEntries = [];
+-		for (const file of sortedFiles) await processJSONLFileByLine(file, async (line) => {
++		// [ccseva-patch] Parallelize file I/O with a bounded concurrency cap.
++		// The upstream serial `for (...) await processJSONLFileByLine(file, ...)`
++		// spends ~99% of its time waiting on disk reads on cold start. JS is
++		// single-threaded so the shared `processedHashes` Set and `allEntries`
++		// array remain safe: .has/.add and .push are synchronous and no await
++		// sits between them. Cap concurrency to avoid EMFILE on large histories.
++		const __CCSEVA_FILE_CONCURRENCY = 32;
++		const __ccsevaProcessOne = (file) => processJSONLFileByLine(file, async (line) => {
+ 			try {
+ 				const result = safeParse(usageDataSchema, JSON.parse(line));
+ 				if (!result.success) return;
+@@ -5988,6 +6037,9 @@ async function loadSessionBlockData(options) {
+ 				logger.debug(`Skipping invalid JSON line in 5-hour blocks: ${error instanceof Error ? error.message : String(error)}`);
+ 			}
+ 		});
++		for (let __ccsevaI = 0; __ccsevaI < sortedFiles.length; __ccsevaI += __CCSEVA_FILE_CONCURRENCY) {
++			await Promise.all(sortedFiles.slice(__ccsevaI, __ccsevaI + __CCSEVA_FILE_CONCURRENCY).map(__ccsevaProcessOne));
++		}
+ 		const blocks = identifySessionBlocks(allEntries, options?.sessionDurationHours);
+ 		return sortByDate(options?.since != null && options.since !== "" || options?.until != null && options.until !== "" ? blocks.filter((block) => {
+ 			const blockDateStr = formatDate(block.startTime.toISOString(), options?.timezone, DEFAULT_LOCALE).replace(/-/g, "");

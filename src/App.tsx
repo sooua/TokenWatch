@@ -19,6 +19,8 @@ interface AppState {
   currentView: ViewType;
   stats: UsageStats | null;
   loading: boolean;
+  isStale: boolean;
+  loadingMessage: string;
   error: string | null;
   sidebarExpanded: boolean;
   notifications: Array<{
@@ -35,6 +37,8 @@ interface AppState {
     customTokenLimit?: number;
     menuBarDisplayMode?: 'percentage' | 'cost' | 'alternate';
     menuBarCostSource?: 'today' | 'sessionWindow';
+    launchOnStartup?: boolean;
+    standaloneWindow?: boolean;
   };
 }
 
@@ -43,6 +47,8 @@ const App: React.FC = () => {
     currentView: 'dashboard',
     stats: null,
     loading: true,
+    isStale: false,
+    loadingMessage: 'Initializing usage tracking...',
     error: null,
     sidebarExpanded: false,
     notifications: [],
@@ -93,7 +99,10 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Load usage stats with enhanced error handling
+  // Load usage stats with enhanced error handling.
+  // `showLoading` controls whether the full LoadingScreen blocks the UI while
+  // we wait — callers pass false for silent background refreshes so cached
+  // data stays visible.
   const loadUsageStats = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) {
@@ -110,6 +119,7 @@ const App: React.FC = () => {
         ...prev,
         stats: data,
         loading: false,
+        isStale: false,
         error: null,
       }));
 
@@ -247,15 +257,42 @@ const App: React.FC = () => {
 
   // Setup auto-refresh and event listeners
   useEffect(() => {
-    // Load settings first, then usage stats
-    loadSettings().then(() => {
-      loadUsageStats();
-    });
+    // Cold-start flow:
+    //   1. Load settings in parallel with reading the persisted stats cache.
+    //   2. If we have cached stats, render the full UI immediately (stale=true)
+    //      so the user never stares at a loading screen.
+    //   3. Fire the real fetch. If no cache existed, we stay on the loading
+    //      screen until it resolves; otherwise it's a silent background refresh.
+    const hydrate = async () => {
+      await loadSettings();
+
+      let hadCache = false;
+      try {
+        if (window.electronAPI?.getCachedUsageStats) {
+          const cached = await window.electronAPI.getCachedUsageStats();
+          if (cached) {
+            hadCache = true;
+            setState((prev) => ({
+              ...prev,
+              stats: cached,
+              loading: false,
+              isStale: true,
+              error: null,
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to read cached stats:', err);
+      }
+
+      await loadUsageStats(!hadCache);
+    };
+    hydrate();
 
     // Handle usage updates from main process
     const handleUsageUpdate = () => {
-      // Silent update from main process - no notification needed
-      setState((prev) => ({ ...prev, loading: true, error: null }));
+      // Silent update — keep showing current data, flip to "stale" briefly.
+      setState((prev) => ({ ...prev, isStale: true, error: null }));
 
       window.electronAPI
         .getUsageStats()
@@ -264,6 +301,7 @@ const App: React.FC = () => {
             ...prev,
             stats: data,
             loading: false,
+            isStale: false,
             error: null,
           }));
         })
@@ -273,9 +311,15 @@ const App: React.FC = () => {
             ...prev,
             error: errorMessage,
             loading: false,
+            isStale: false,
           }));
         });
     };
+
+    // Progress messages from the main process first-fetch flow.
+    const progressListener = window.electronAPI?.onLoadingProgress?.((payload) => {
+      setState((prev) => ({ ...prev, loadingMessage: payload.message }));
+    });
 
     if (window.electronAPI) {
       window.electronAPI.onUsageUpdated(handleUsageUpdate);
@@ -284,6 +328,9 @@ const App: React.FC = () => {
     return () => {
       if (window.electronAPI) {
         window.electronAPI.removeUsageUpdatedListener(handleUsageUpdate);
+        if (progressListener) {
+          window.electronAPI.removeLoadingProgressListener(progressListener);
+        }
       }
     };
   }, [loadSettings, loadUsageStats]);
@@ -354,7 +401,7 @@ const App: React.FC = () => {
   if (state.loading && !state.stats) {
     return (
       <div className="app-background">
-        <LoadingScreen />
+        <LoadingScreen message={state.loadingMessage} />
       </div>
     );
   }
@@ -398,7 +445,7 @@ const App: React.FC = () => {
   if (!currentStats) {
     return (
       <div className="app-background">
-        <LoadingScreen />
+        <LoadingScreen message={state.loadingMessage} />
       </div>
     );
   }
@@ -409,6 +456,15 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="app-background" />
+
+      {state.isStale && (
+        <div className="absolute top-0 inset-x-0 z-50 flex justify-center pointer-events-none">
+          <div className="mt-2 px-3 py-1 rounded-full text-[11px] font-medium text-white/80 bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-2 shadow-lg">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            {state.loadingMessage || 'Refreshing…'}
+          </div>
+        </div>
+      )}
 
       <div className="relative flex h-screen overflow-hidden">
         {/* Main Content - Full Width for Compact Mode */}

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { UsageStats } from '../types/usage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
 
 interface SettingsPanelProps {
   preferences: {
@@ -12,6 +13,8 @@ interface SettingsPanelProps {
     customTokenLimit?: number;
     menuBarDisplayMode?: 'percentage' | 'cost' | 'alternate';
     menuBarCostSource?: 'today' | 'sessionWindow';
+    launchOnStartup?: boolean;
+    standaloneWindow?: boolean;
   };
   onUpdatePreferences: (preferences: Partial<SettingsPanelProps['preferences']>) => void;
   stats: UsageStats;
@@ -275,6 +278,49 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Launch on Startup */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">🚀</span>
+                <div>
+                  <div className="text-white font-medium">Launch on Startup</div>
+                  <div className="text-white/60 text-sm">
+                    Start CCSeva automatically when you sign in, hidden in the tray
+                  </div>
+                </div>
+              </div>
+              <Switch
+                checked={preferences.launchOnStartup === true}
+                onCheckedChange={(checked) =>
+                  handlePreferenceChange('launchOnStartup', Boolean(checked))
+                }
+              />
+            </div>
+          </div>
+
+          {/* Standalone Window Mode */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">🪟</span>
+                <div>
+                  <div className="text-white font-medium">Standalone Window</div>
+                  <div className="text-white/60 text-sm">
+                    Show CCSeva as a normal resizable window with a taskbar entry instead of a
+                    tray popup. Takes effect next time the window is opened.
+                  </div>
+                </div>
+              </div>
+              <Switch
+                checked={preferences.standaloneWindow === true}
+                onCheckedChange={(checked) =>
+                  handlePreferenceChange('standaloneWindow', Boolean(checked))
+                }
+              />
             </div>
           </div>
         </CardContent>

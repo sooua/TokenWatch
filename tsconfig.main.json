@@ -11,7 +11,8 @@
   "include": [
     "main.ts",
     "src/services/**/*.ts",
-    "src/types/**/*.ts"
+    "src/types/**/*.ts",
+    "src/workers/**/*.ts"
   ],
   "exclude": [
     "src/components/**/*",

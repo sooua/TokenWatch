@@ -2,13 +2,70 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BrowserWindow, Tray, app, ipcMain, nativeImage, screen } from 'electron';
+import {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  ipcMain,
+  nativeImage,
+  screen,
+} from 'electron';
 import { CCUsageService } from './src/services/ccusageService.js';
 import { NotificationService } from './src/services/notificationService.js';
 import { SettingsService } from './src/services/settingsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const isMac = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
+
+// When launched as a Windows GUI app (or when the parent shell exits), stdout
+// and stderr can become detached or have broken pipes. Any write then throws
+// EPIPE and bubbles up to the main process, killing the app. ccusage/consola
+// hits this whenever it warns. Swallow the benign pipe errors here.
+for (const stream of [process.stdout, process.stderr] as const) {
+  stream.on('error', (err: NodeJS.ErrnoException) => {
+    if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED')) {
+      return;
+    }
+  });
+}
+
+process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
+  if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED')) {
+    return;
+  }
+  // Log via console.error, but guard against that itself throwing.
+  try {
+    console.error('Uncaught exception:', err);
+  } catch {
+    // Nothing to do — the logging channel is gone.
+  }
+});
+
+process.on('unhandledRejection', (reason) => {
+  try {
+    console.error('Unhandled rejection:', reason);
+  } catch {
+    /* swallow */
+  }
+});
+
+const APP_USER_MODEL_ID = 'com.ccseva.app';
+if (isWindows) {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
+
+// Enforce a single running instance. Without this, relaunching CCSeva from a
+// shortcut or the installer opens a second tray icon / window while the first
+// one is still hidden, which is confusing and doubles the ccusage workload.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
 
 class CCSevaApp {
   private tray: Tray | null = null;
@@ -22,6 +79,10 @@ class CCSevaApp {
   private cachedMenuBarData: any = null;
   private menuBarDisplayMode: 'percentage' | 'cost' | 'alternate' = 'alternate';
   private menuBarCostSource: 'today' | 'sessionWindow' = 'today';
+  private isQuitting = false;
+  private firstFetchDone = false;
+  private progressTimer: NodeJS.Timeout | null = null;
+  private standaloneWindow = false;
 
   constructor() {
     this.usageService = CCUsageService.getInstance();
@@ -32,30 +93,34 @@ class CCSevaApp {
   async initialize() {
     await app.whenReady();
 
-    // Load settings on startup
     const settings = await this.settingsService.loadSettings();
     this.menuBarDisplayMode = settings.menuBarDisplayMode || 'alternate';
     this.menuBarCostSource = settings.menuBarCostSource || 'today';
+    this.standaloneWindow = settings.standaloneWindow === true;
 
-    // Apply plan configuration to usage service
     this.usageService.updateConfiguration({
       plan: settings.plan,
       customTokenLimit: settings.customTokenLimit,
       menuBarCostSource: settings.menuBarCostSource,
     });
 
+    this.applyLaunchOnStartup(settings.launchOnStartup === true);
+
     this.createTray();
     this.createWindow();
     this.setupIPC();
     this.startUsagePolling();
-    
-    // Only start display toggle if mode is 'alternate'
+
     if (this.menuBarDisplayMode === 'alternate') {
       this.startDisplayToggle();
     }
 
     app.on('window-all-closed', () => {
-      // Prevent app from quitting, keep in menu bar
+      // Keep the app alive in the tray
+    });
+
+    app.on('before-quit', () => {
+      this.isQuitting = true;
     });
 
     app.on('activate', () => {
@@ -63,38 +128,187 @@ class CCSevaApp {
         this.createWindow();
       }
     });
-  }
 
-  private createTray() {
-    // Create a text-only menu bar (no icon)
-    // Use an empty 1x1 transparent image as placeholder
-    const emptyIcon = nativeImage.createEmpty();
-
-    this.tray = new Tray(emptyIcon);
-    this.tray.setToolTip('CCSeva');
-
-    // Update tray title with usage percentage
-    this.updateTrayTitle();
-
-    this.tray.on('click', () => {
-      this.toggleWindow();
+    // When a second instance tries to launch, surface the existing window
+    // instead of letting the second process die silently. This covers the
+    // shortcut/double-launch case on Windows where the first instance is
+    // hidden in the tray.
+    app.on('second-instance', () => {
+      this.showWindow();
     });
   }
 
+  private getTrayIconImage() {
+    // macOS: text-only menu bar — empty image is fine, text is drawn via setTitle.
+    // Windows/Linux: need a real image, otherwise the tray icon is invisible.
+    if (isMac) {
+      return nativeImage.createEmpty();
+    }
+
+    const trayPng = path.join(__dirname, '..', 'assets', 'tray.png');
+    const trayIco = path.join(__dirname, '..', 'assets', 'tray.ico');
+    const preferred = isWindows && fs.existsSync(trayIco) ? trayIco : trayPng;
+
+    if (fs.existsSync(preferred)) {
+      return nativeImage.createFromPath(preferred);
+    }
+    // Last-resort fallback so the constructor doesn't crash.
+    return nativeImage.createEmpty();
+  }
+
+  private createTray() {
+    this.tray = new Tray(this.getTrayIconImage());
+    this.tray.setToolTip('CCSeva');
+
+    this.updateTrayTitle();
+
+    // Single click: toggle window. On Windows 'click' fires for left-click.
+    this.tray.on('click', () => {
+      this.toggleWindow();
+    });
+
+    // Context menu on right-click — provides a reliable way to quit on Windows.
+    this.rebuildContextMenu();
+  }
+
+  private rebuildContextMenu() {
+    if (!this.tray) return;
+
+    const data = this.cachedMenuBarData;
+    const pctLabel =
+      data != null ? `Usage: ${Math.round(data.percentageUsed)}%` : 'Usage: --';
+    const costLabel =
+      data != null ? `Cost: $${Number(data.cost ?? 0).toFixed(2)}` : 'Cost: --';
+
+    const menu = Menu.buildFromTemplate([
+      { label: pctLabel, enabled: false },
+      { label: costLabel, enabled: false },
+      { type: 'separator' },
+      { label: 'Open CCSeva', click: () => this.showWindow() },
+      {
+        label: 'Refresh',
+        click: async () => {
+          await this.usageService.getUsageStats();
+          await this.updateTrayTitle();
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          this.isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+
+    this.tray.setContextMenu(menu);
+  }
+
   private async updateTrayTitle() {
+    const startedProgress = this.startFirstFetchProgress();
     try {
       const menuBarData = await this.usageService.getMenuBarData();
       this.cachedMenuBarData = menuBarData;
 
-      // Update tray title based on current display mode
       this.updateTrayDisplay();
+      this.rebuildContextMenu();
 
-      // Check for notifications (auto source)
       this.notificationService.checkAndNotify(menuBarData, 'auto');
+
+      if (startedProgress) {
+        this.emitProgress({ stage: 'done', message: 'Up to date' });
+      }
     } catch (error) {
       console.error('Error updating tray title:', error);
-      this.tray?.setTitle('--');
+      this.setTrayLabel('--');
       this.cachedMenuBarData = null;
+      this.rebuildContextMenu();
+      if (startedProgress) {
+        this.emitProgress({ stage: 'error', message: 'Failed to load usage data' });
+      }
+    } finally {
+      this.stopFirstFetchProgress();
+      this.firstFetchDone = true;
+    }
+  }
+
+  private startFirstFetchProgress(): boolean {
+    if (this.firstFetchDone) return false;
+
+    const fileCount = this.usageService.countSessionFiles();
+    const steps: Array<{ atMs: number; stage: string; message: string }> = [
+      {
+        atMs: 0,
+        stage: 'scanning',
+        message:
+          fileCount > 0
+            ? `Scanning ~/.claude (${fileCount.toLocaleString()} session files)…`
+            : 'Scanning ~/.claude…',
+      },
+      { atMs: 1500, stage: 'parsing', message: 'Parsing session logs…' },
+      { atMs: 4000, stage: 'pricing', message: 'Fetching model pricing…' },
+      { atMs: 8000, stage: 'computing', message: 'Computing usage statistics…' },
+      {
+        atMs: 15000,
+        stage: 'slow',
+        message: 'Large history detected — this may take a bit longer…',
+      },
+    ];
+
+    let idx = 0;
+    this.emitProgress(steps[0]);
+    this.progressTimer = setInterval(() => {
+      idx++;
+      if (idx >= steps.length) {
+        if (this.progressTimer) {
+          clearInterval(this.progressTimer);
+          this.progressTimer = null;
+        }
+        return;
+      }
+      this.emitProgress(steps[idx]);
+    }, 1500);
+
+    return true;
+  }
+
+  private stopFirstFetchProgress() {
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+      this.progressTimer = null;
+    }
+  }
+
+  private emitProgress(payload: { stage: string; message: string }) {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('usage-loading-progress', payload);
+    }
+  }
+
+  private applyLaunchOnStartup(enabled: boolean) {
+    // On Windows this writes HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
+    // On macOS it uses the LSBackgroundOnly launchd item. Linux is a no-op.
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: enabled,
+        openAsHidden: true, // start minimized to the tray, not as a visible window
+        name: 'CCSeva',
+      });
+    } catch (error) {
+      console.error('Failed to update login item settings:', error);
+    }
+  }
+
+  private setTrayLabel(label: string) {
+    if (!this.tray) return;
+    if (isMac) {
+      // macOS shows text directly in the menu bar.
+      this.tray.setTitle(label);
+      this.tray.setToolTip(`CCSeva ${label}`);
+    } else {
+      // Windows/Linux can only show text in the tooltip (hover).
+      this.tray.setToolTip(`CCSeva — ${label}`);
     }
   }
 
@@ -102,28 +316,30 @@ class CCSevaApp {
     if (!this.cachedMenuBarData) return;
 
     switch (this.menuBarDisplayMode) {
-      case 'percentage':
+      case 'percentage': {
         const percentage = Math.round(this.cachedMenuBarData.percentageUsed);
-        this.tray?.setTitle(`${percentage}%`);
+        this.setTrayLabel(`${percentage}%`);
         break;
-      case 'cost':
+      }
+      case 'cost': {
         const cost = this.cachedMenuBarData.cost;
-        this.tray?.setTitle(`$${cost.toFixed(2)}`);
+        this.setTrayLabel(`$${cost.toFixed(2)}`);
         break;
-      case 'alternate':
+      }
+      case 'alternate': {
         if (this.showPercentage) {
           const pct = Math.round(this.cachedMenuBarData.percentageUsed);
-          this.tray?.setTitle(`${pct}%`);
+          this.setTrayLabel(`${pct}%`);
         } else {
           const cst = this.cachedMenuBarData.cost;
-          this.tray?.setTitle(`$${cst.toFixed(2)}`);
+          this.setTrayLabel(`$${cst.toFixed(2)}`);
         }
         break;
+      }
     }
   }
 
   private startDisplayToggle() {
-    // Switch between percentage and cost every 3 seconds
     this.displayInterval = setInterval(() => {
       this.showPercentage = !this.showPercentage;
       this.updateTrayDisplay();
@@ -131,41 +347,73 @@ class CCSevaApp {
   }
 
   private createWindow() {
-    const { width } = screen.getPrimaryDisplay().workAreaSize;
+    // Two modes:
+    //   - Tray popup (default): frameless, alwaysOnTop, no taskbar, auto-hides
+    //     on blur — behaves like a menu bar dropdown.
+    //   - Standalone window: framed, resizable, appears in the taskbar, no
+    //     auto-hide — behaves like a normal desktop app. Users can tick this
+    //     in Settings to get a proper main window they can minimize/snap.
+    const windowIconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
+    const tryIcon = isWindows && fs.existsSync(windowIconPath) ? windowIconPath : undefined;
 
+    const standalone = this.standaloneWindow;
     this.window = new BrowserWindow({
-      width: 600,
-      height: 600,
-      x: width - 620,
-      y: 10,
+      width: standalone ? 960 : 600,
+      height: standalone ? 720 : 600,
+      minWidth: 520,
+      minHeight: 480,
       show: false,
-      frame: false,
+      frame: !standalone,
       resizable: true,
-      skipTaskbar: true,
-      alwaysOnTop: true,
+      skipTaskbar: !standalone,
+      alwaysOnTop: !standalone,
+      title: 'CCSeva',
+      icon: tryIcon,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js'),
       },
     });
-    // this.window.webContents.openDevTools();
 
-    // Load the React app
+    this.window.loadFile(path.join(__dirname, 'index.html'));
     if (process.env.NODE_ENV === 'development') {
-      this.window.loadFile(path.join(__dirname, 'index.html'));
       this.window.webContents.openDevTools({ mode: 'detach' });
-    } else {
-      this.window.loadFile(path.join(__dirname, 'index.html'));
     }
 
     this.window.on('blur', () => {
-      this.hideWindow();
+      // In dev with DevTools attached, the main window blurs when DevTools
+      // takes focus — skip auto-hide in that case so debugging stays usable.
+      // In standalone mode, we're a normal window — don't auto-hide either.
+      if (process.env.NODE_ENV !== 'development' && !this.standaloneWindow) {
+        this.hideWindow();
+      }
+    });
+
+    this.window.on('close', (event) => {
+      // Standalone window: clicking X should hide to tray, not quit, so the
+      // tray stays responsive. The tray's Quit menu item (or Ctrl+Q) is the
+      // real way out.
+      if (!this.isQuitting) {
+        event.preventDefault();
+        this.hideWindow();
+      }
     });
 
     this.window.on('closed', () => {
       this.window = null;
     });
+  }
+
+  private recreateWindow() {
+    if (this.window && !this.window.isDestroyed()) {
+      // destroy() skips the `close` handler that would otherwise just hide
+      // the window — we actually want it gone so `createWindow` can rebuild
+      // with the new chrome (frame/taskbar flags).
+      this.window.destroy();
+    }
+    this.window = null;
+    this.createWindow();
   }
 
   private setupIPC() {
@@ -178,9 +426,17 @@ class CCSevaApp {
       }
     });
 
+    ipcMain.handle('get-cached-usage-stats', () => {
+      try {
+        return this.usageService.loadPersistedStats();
+      } catch (error) {
+        console.error('Error reading cached stats:', error);
+        return null;
+      }
+    });
+
     ipcMain.handle('refresh-data', async () => {
       try {
-        // Clear cache and fetch fresh data
         const stats = await this.usageService.getUsageStats();
         await this.updateTrayTitle();
         return stats;
@@ -197,6 +453,7 @@ class CCSevaApp {
       if (this.displayInterval) {
         clearInterval(this.displayInterval);
       }
+      this.isQuitting = true;
       app.quit();
     });
 
@@ -204,7 +461,6 @@ class CCSevaApp {
       return this.takeScreenshot();
     });
 
-    // Settings handlers
     ipcMain.handle('load-settings', async () => {
       try {
         return await this.settingsService.loadSettings();
@@ -217,38 +473,56 @@ class CCSevaApp {
     ipcMain.handle('save-settings', async (_, settings) => {
       try {
         await this.settingsService.saveSettings(settings);
-        
-        // Propagate plan settings to usage service
+
         this.usageService.updateConfiguration({
           plan: settings.plan,
           customTokenLimit: settings.customTokenLimit,
           menuBarCostSource: settings.menuBarCostSource,
         });
-        
-        // Handle menu bar display mode change
-        if (settings.menuBarDisplayMode && settings.menuBarDisplayMode !== this.menuBarDisplayMode) {
+
+        if (
+          settings.menuBarDisplayMode &&
+          settings.menuBarDisplayMode !== this.menuBarDisplayMode
+        ) {
           this.menuBarDisplayMode = settings.menuBarDisplayMode;
-          
-          // Stop or start display toggle based on mode
+
           if (this.menuBarDisplayMode === 'alternate') {
             if (!this.displayInterval) {
               this.startDisplayToggle();
             }
-          } else {
-            if (this.displayInterval) {
-              clearInterval(this.displayInterval);
-              this.displayInterval = null;
-            }
+          } else if (this.displayInterval) {
+            clearInterval(this.displayInterval);
+            this.displayInterval = null;
           }
-          
-          // Update display immediately
+
           this.updateTrayDisplay();
         }
 
-        // If cost source changed, refresh tray title to pick up new cost
-        if (settings.menuBarCostSource && settings.menuBarCostSource !== this.menuBarCostSource) {
+        if (
+          settings.menuBarCostSource &&
+          settings.menuBarCostSource !== this.menuBarCostSource
+        ) {
           this.menuBarCostSource = settings.menuBarCostSource;
           await this.updateTrayTitle();
+        }
+
+        if (typeof settings.launchOnStartup === 'boolean') {
+          this.applyLaunchOnStartup(settings.launchOnStartup);
+        }
+
+        if (
+          typeof settings.standaloneWindow === 'boolean' &&
+          settings.standaloneWindow !== this.standaloneWindow
+        ) {
+          this.standaloneWindow = settings.standaloneWindow;
+          // Rebuild the window with the new chrome. Preserve visibility so the
+          // user isn't surprised by the window disappearing on them.
+          const wasVisible = this.window?.isVisible() ?? false;
+          this.recreateWindow();
+          if (wasVisible) {
+            // Let the window finish loading before showing it again.
+            this.window?.webContents.once('did-finish-load', () => this.showWindow());
+          }
         }
 
         return { success: true };
@@ -260,46 +534,99 @@ class CCSevaApp {
   }
 
   private startUsagePolling() {
-    // Update every 30 seconds
     this.updateInterval = setInterval(async () => {
       await this.updateTrayTitle();
 
-      // Notify renderer if window is open
       if (this.window && !this.window.isDestroyed()) {
         this.window.webContents.send('usage-updated');
       }
     }, 30000);
 
-    // Initial update
     setTimeout(() => this.updateTrayTitle(), 1000);
   }
 
-  private showWindow() {
-    if (this.window) {
+  private computeWindowBounds() {
+    const currentBounds = this.window?.getBounds();
+    const width = currentBounds?.width ?? (this.standaloneWindow ? 960 : 600);
+    const height = currentBounds?.height ?? (this.standaloneWindow ? 720 : 600);
+    const margin = 10;
+
+    // Standalone window: center on the active display and let the user move
+    // it around normally.
+    if (this.standaloneWindow) {
+      const cursorPoint = screen.getCursorScreenPoint();
+      const display = screen.getDisplayNearestPoint(cursorPoint);
+      const work = display.workArea;
+      return {
+        x: Math.round(work.x + (work.width - width) / 2),
+        y: Math.round(work.y + (work.height - height) / 2),
+        width,
+        height,
+      };
+    }
+
+    // On macOS the menu bar sits at the top — anchor near the top-right.
+    if (isMac) {
       const cursorPoint = screen.getCursorScreenPoint();
       const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
-
-      const { x, y, width, height } = activeDisplay.workArea;
-      this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      this.window.setBounds({ x: x + width - 620, y: y + 10, width: 600, height: 600 });
-      this.window.show();
-      this.window.focus();
+      const { x, y, width: sw } = activeDisplay.workArea;
+      return { x: x + sw - width - margin - 10, y: y + margin, width, height };
     }
+
+    // On Windows/Linux anchor near the tray icon (usually bottom-right).
+    const trayBounds = this.tray?.getBounds();
+    const anchor =
+      trayBounds && trayBounds.width > 0 && trayBounds.height > 0
+        ? { x: trayBounds.x + trayBounds.width / 2, y: trayBounds.y + trayBounds.height / 2 }
+        : screen.getCursorScreenPoint();
+
+    const display = screen.getDisplayNearestPoint(anchor);
+    const work = display.workArea;
+
+    // Clamp the window inside the active display's work area.
+    let targetX = Math.round(anchor.x - width / 2);
+    targetX = Math.min(Math.max(targetX, work.x + margin), work.x + work.width - width - margin);
+
+    // Decide above or below the tray based on which side has more space.
+    const spaceBelow = work.y + work.height - anchor.y;
+    const targetY =
+      spaceBelow >= height + margin
+        ? Math.round(anchor.y + margin)
+        : Math.round(Math.max(work.y + margin, anchor.y - height - margin));
+
+    return { x: targetX, y: targetY, width, height };
+  }
+
+  private showWindow() {
+    if (!this.window) {
+      this.createWindow();
+    }
+    if (!this.window) return;
+
+    if (isMac) {
+      this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+
+    this.window.setBounds(this.computeWindowBounds());
+    this.window.show();
+    this.window.focus();
   }
 
   private hideWindow() {
-    if (this.window) {
+    if (this.window && !this.window.isDestroyed()) {
       this.window.hide();
     }
   }
 
   private toggleWindow() {
-    if (this.window) {
-      if (this.window.isVisible()) {
-        this.hideWindow();
-      } else {
-        this.showWindow();
-      }
+    if (!this.window) {
+      this.showWindow();
+      return;
+    }
+    if (this.window.isVisible() && this.window.isFocused()) {
+      this.hideWindow();
+    } else {
+      this.showWindow();
     }
   }
 
@@ -358,6 +685,5 @@ class CCSevaApp {
   }
 }
 
-// Initialize the app
 const ccSevaApp = new CCSevaApp();
 ccSevaApp.initialize().catch(console.error);

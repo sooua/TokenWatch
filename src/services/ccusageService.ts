@@ -1,4 +1,8 @@
-import { loadDailyUsageData, loadSessionBlockData } from 'ccusage/data-loader';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import type {
   ActualResetInfo,
   DailyUsage,
@@ -11,6 +15,13 @@ import type {
 } from '../types/usage.js';
 import { ResetTimeService } from './resetTimeService.js';
 import { SessionTracker } from './sessionTracker.js';
+
+const STATS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h — stale but useful for cold start
+
+interface PersistedStatsPayload {
+  savedAt: number;
+  stats: UsageStats;
+}
 
 interface ModelBreakdown {
   modelName: string;
@@ -79,7 +90,8 @@ export class CCUsageService {
   private static instance: CCUsageService;
   private cachedStats: UsageStats | null = null;
   private lastUpdate = 0;
-  private readonly CACHE_DURATION = 3000; // 3 seconds like Python script
+  private readonly CACHE_DURATION = 20000; // 20s — in-memory freshness, matches ~polling cadence
+  private inFlightFetch: Promise<UsageStats> | null = null;
   private resetTimeService: ResetTimeService;
   private sessionTracker: SessionTracker;
   private historicalBlocks: SessionBlock[] = []; // Store session blocks for analysis
@@ -93,10 +105,77 @@ export class CCUsageService {
   private detectedTokenLimit = 7000;
   // Basis for cost shown in menu bar
   private menuBarCostSource: 'today' | 'sessionWindow' = 'today';
+  private readonly statsCachePath: string;
+
+  private worker: Worker | null = null;
+  private pendingWorkerRequests = new Map<number, { resolve: (blocks: SessionBlock[]) => void; reject: (err: Error) => void }>();
+  private nextWorkerRequestId = 1;
 
   constructor() {
     this.resetTimeService = ResetTimeService.getInstance();
     this.sessionTracker = SessionTracker.getInstance();
+    this.statsCachePath = path.join(os.homedir(), '.ccseva', 'stats-cache.json');
+  }
+
+  /**
+   * Lazily spin up a worker_threads worker that runs ccusage's JSONL parsing
+   * off the Electron main process. Keeping the worker alive between requests
+   * avoids the cold-start cost of re-loading the ccusage bundle. It also keeps
+   * the libuv thread pool warm for file I/O.
+   */
+  private ensureWorker(): Worker {
+    if (this.worker) return this.worker;
+
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const workerPath = path.join(here, '..', 'workers', 'ccusageWorker.js');
+
+    const worker = new Worker(workerPath);
+
+    worker.on('message', (msg: { id: number; ok: boolean; blocks?: SessionBlock[]; error?: string }) => {
+      const pending = this.pendingWorkerRequests.get(msg.id);
+      if (!pending) return;
+      this.pendingWorkerRequests.delete(msg.id);
+      if (msg.ok && msg.blocks) {
+        pending.resolve(msg.blocks);
+      } else {
+        pending.reject(new Error(msg.error || 'Worker returned no blocks'));
+      }
+    });
+
+    worker.on('error', (err) => {
+      console.error('[ccusage worker] error:', err);
+      // Reject everything waiting so callers unblock instead of hanging.
+      for (const [, pending] of this.pendingWorkerRequests) pending.reject(err);
+      this.pendingWorkerRequests.clear();
+    });
+
+    worker.on('exit', (code) => {
+      this.worker = null;
+      if (code !== 0) {
+        console.error('[ccusage worker] exited with code', code);
+        for (const [, pending] of this.pendingWorkerRequests) {
+          pending.reject(new Error(`Worker exited with code ${code}`));
+        }
+        this.pendingWorkerRequests.clear();
+      }
+    });
+
+    this.worker = worker;
+    return worker;
+  }
+
+  private loadBlocksInWorker(): Promise<SessionBlock[]> {
+    const worker = this.ensureWorker();
+    const id = this.nextWorkerRequestId++;
+    return new Promise<SessionBlock[]>((resolve, reject) => {
+      this.pendingWorkerRequests.set(id, { resolve, reject });
+      worker.postMessage({
+        type: 'fetch',
+        id,
+        sessionDurationHours: 5,
+        mode: 'calculate',
+      });
+    });
   }
 
   static getInstance(): CCUsageService {
@@ -152,35 +231,120 @@ export class CCUsageService {
       return this.cachedStats;
     }
 
+    // Coalesce concurrent callers onto a single in-flight fetch. Without this,
+    // the main-process 30s polling + renderer requests fire multiple
+    // simultaneous ccusage reads over the same JSONL set, which can
+    // dramatically slow down the first result on large histories.
+    if (this.inFlightFetch) {
+      return this.inFlightFetch;
+    }
+
+    this.inFlightFetch = this.performFetch().finally(() => {
+      this.inFlightFetch = null;
+    });
+    return this.inFlightFetch;
+  }
+
+  private async performFetch(): Promise<UsageStats> {
     try {
-      // Get both session blocks and daily data for complete information
-      const [blocks, dailyData] = await Promise.all([
-        loadSessionBlockData({
-          sessionDurationHours: 5, // Claude uses 5-hour sessions
-          mode: 'calculate', // Calculate costs from tokens for accuracy
-        }),
-        loadDailyUsageData({
-          mode: 'calculate', // Calculate costs from tokens
-        }),
-      ]);
+      // ccusage's JSONL parsing runs in a worker_threads worker so the
+      // Electron main process stays responsive (tray, IPC, window events)
+      // while ~1,700 files get scanned on a cold start. We used to also call
+      // `loadDailyUsageData` in parallel, but it walks the same
+      // ~/.claude/projects tree and re-parses every JSONL file — roughly
+      // doubling cold-start I/O and CPU. `parseBlocksData` derives daily
+      // usage from blocks (see `convertBlocksToDailyUsage`), so the extra
+      // call is redundant. Trade-off: per-model token splits become
+      // approximate (evenly divided across the models in a block) —
+      // acceptable for a monitoring dashboard.
+      const blocks = await this.loadBlocksInWorker();
 
       if (!blocks || blocks.length === 0) {
         console.error('No blocks data received');
         return this.getMockStats();
       }
 
-      const stats = this.parseBlocksData(blocks, dailyData);
+      const stats = this.parseBlocksData(blocks);
 
       this.cachedStats = stats;
-      this.lastUpdate = now;
+      this.lastUpdate = Date.now();
       this.historicalBlocks = blocks;
+
+      // Persist to disk so the next cold start can render immediately.
+      this.persistStatsToDisk(stats);
 
       return stats;
     } catch (error) {
       console.error('Error fetching usage stats:', error);
-
-      // Return mock data for development/testing
       return this.getMockStats();
+    }
+  }
+
+  /**
+   * Load the most recently persisted stats, if any. Used on cold start so the
+   * UI can render immediately with last-known values while a fresh fetch runs.
+   * Returns null when the cache is missing, unreadable, or too stale.
+   */
+  loadPersistedStats(): UsageStats | null {
+    try {
+      if (!fs.existsSync(this.statsCachePath)) {
+        return null;
+      }
+      const raw = fs.readFileSync(this.statsCachePath, 'utf8');
+      const parsed = JSON.parse(raw) as PersistedStatsPayload;
+      if (!parsed || typeof parsed.savedAt !== 'number' || !parsed.stats) {
+        return null;
+      }
+      if (Date.now() - parsed.savedAt > STATS_CACHE_MAX_AGE_MS) {
+        return null;
+      }
+      return parsed.stats;
+    } catch (error) {
+      console.error('Failed to load persisted stats cache:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cheap count of JSONL session files under ~/.claude/projects. Used by the
+   * loading screen to tell the user how much data is being parsed.
+   */
+  countSessionFiles(): number {
+    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+    if (!fs.existsSync(projectsDir)) return 0;
+    let count = 0;
+    const walk = (dir: string, depth: number) => {
+      if (depth > 3) return;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+          count++;
+        }
+      }
+    };
+    walk(projectsDir, 0);
+    return count;
+  }
+
+  private persistStatsToDisk(stats: UsageStats): void {
+    try {
+      const dir = path.dirname(this.statsCachePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const payload: PersistedStatsPayload = { savedAt: Date.now(), stats };
+      fs.writeFileSync(this.statsCachePath, JSON.stringify(payload), 'utf8');
+    } catch (error) {
+      // Cache write failures should never break the app — log and continue.
+      console.error('Failed to persist stats cache:', error);
     }
   }
 
