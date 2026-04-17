@@ -20,6 +20,8 @@ export interface AppSettings {
   // move — main process anchors top-right on first show.
   miniHudX?: number;
   miniHudY?: number;
+  autoCheckUpdates: boolean;
+  showCodexCard: boolean;
 }
 
 export class SettingsService {
@@ -47,6 +49,10 @@ export class SettingsService {
       language: 'auto',
       miniHud: false,
       miniHudContent: 'percentageCost',
+      autoCheckUpdates: true,
+      // Off by default — the dashboard is Claude-first; Codex is optional
+      // extra content the user can enable explicitly.
+      showCodexCard: false,
     };
 
     // Ensure settings directory exists

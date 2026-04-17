@@ -4,6 +4,14 @@
   "directories": {
     "output": "release"
   },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "sooua",
+      "repo": "TokenWatch",
+      "releaseType": "release"
+    }
+  ],
   "files": [
     "dist/**/*",
     "assets/**/*",

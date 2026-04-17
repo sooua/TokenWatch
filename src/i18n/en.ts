@@ -55,8 +55,8 @@ export const en = {
     screenshotFailed: 'Screenshot failed',
   },
   dashboard: {
-    heroTitle: 'Usage overview',
-    heroSubtitle: 'Live token consumption and session status',
+    heroTitle: 'Claude Code — usage overview',
+    heroSubtitle: 'Live Claude Code token consumption and session status',
     tokensUsed: 'Tokens used',
     tokensUsedOf: 'of {{limit}}',
     costToday: 'Cost today',
@@ -195,6 +195,9 @@ export const en = {
     standalone: 'Standalone window',
     standaloneDesc:
       'Show TokenWatch as a normal resizable window with a taskbar entry. Takes effect next time the window is opened.',
+    codexCard: 'Show Codex CLI card',
+    codexCardDesc:
+      'Append a second card to the dashboard showing OpenAI Codex CLI rate limits. Off by default. Only has an effect when Codex CLI is installed (reads ~/.codex/sessions).',
     miniHud: 'Mini HUD',
     miniHudDesc:
       'Small always-on-top floating panel showing live usage. Drag to reposition; click to open the main window.',
@@ -208,6 +211,31 @@ export const en = {
     criticalLabel: 'CRITICAL',
     warningLabel: 'WARNING',
     normalLabel: 'NORMAL',
+  },
+  codex: {
+    title: 'Codex CLI',
+    subtitle: 'OpenAI Codex rate limits and context window',
+    primary5h: 'Primary · 5h',
+    secondary7d: 'Secondary · 7d',
+    resetIn: 'resets in',
+    lastSessionTokens: 'Last session tokens',
+    contextWindow: 'Context window',
+    sessions: 'Sessions',
+    lastEvent: 'Last event {{value}}',
+  },
+  update: {
+    available: 'TokenWatch {{version}} is available',
+    downloading: 'Downloading update… {{percent}}%',
+    downloaded: 'Update {{version}} ready — restart to install',
+    error: 'Update check failed',
+    downloadBtn: 'Download',
+    installBtn: 'Install & restart',
+    settingsTitle: 'Automatic updates',
+    settingsDesc:
+      'Check GitHub Releases on launch and every 4 hours. You will be asked before any download starts.',
+    checkNow: 'Check for updates now',
+    checking: 'Checking for updates…',
+    upToDate: 'You are on the latest version',
   },
 };
 

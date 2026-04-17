@@ -16,6 +16,7 @@ export type LoadingProgressListener = (payload: LoadingProgressPayload) => void;
 export interface ElectronAPI {
   getUsageStats: () => Promise<any>;
   getCachedUsageStats: () => Promise<any | null>;
+  getCodexStats: () => Promise<any>;
   refreshData: () => Promise<any>;
   quitApp: () => Promise<void>;
   takeScreenshot: () => Promise<ScreenshotResult>;
@@ -40,6 +41,13 @@ export interface ElectronAPI {
     callback: (content: string) => void
   ) => (...args: unknown[]) => void;
   removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) => void;
+  updateCheck: () => Promise<void>;
+  updateDownload: () => Promise<void>;
+  updateInstall: () => Promise<void>;
+  onUpdateStatus: (
+    callback: (payload: Record<string, unknown>) => void
+  ) => (...args: unknown[]) => void;
+  removeUpdateStatusListener: (listener: (...args: unknown[]) => void) => void;
 }
 
 declare global {

@@ -2,6 +2,8 @@ import {
   AppWindow,
   Bot,
   Clock,
+  Cpu,
+  Download,
   Gauge,
   Globe,
   Languages,
@@ -62,6 +64,8 @@ interface SettingsPanelProps {
     language?: 'auto' | 'en' | 'zh';
     miniHud?: boolean;
     miniHudContent?: 'percentage' | 'percentageCost' | 'percentageCostBurn';
+    autoCheckUpdates?: boolean;
+    showCodexCard?: boolean;
   };
   onUpdatePreferences: (preferences: Partial<SettingsPanelProps['preferences']>) => void;
   stats: UsageStats;
@@ -423,6 +427,58 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </Select>
               </div>
             )}
+          </div>
+
+          {/* Codex CLI card toggle */}
+          <div className="flex items-center justify-between gap-3">
+            <SectionHeader
+              icon={<Cpu className="w-4 h-4" strokeWidth={1.75} />}
+              title={t('settings.codexCard')}
+              description={t('settings.codexCardDesc')}
+            />
+            <Switch
+              checked={preferences.showCodexCard === true}
+              onCheckedChange={(checked) =>
+                handlePreferenceChange('showCodexCard', Boolean(checked))
+              }
+            />
+          </div>
+
+          {/* Auto-update */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <SectionHeader
+                icon={<Download className="w-4 h-4" strokeWidth={1.75} />}
+                title={t('update.settingsTitle')}
+                description={t('update.settingsDesc')}
+              />
+              <Switch
+                checked={preferences.autoCheckUpdates !== false}
+                onCheckedChange={(checked) =>
+                  handlePreferenceChange('autoCheckUpdates', Boolean(checked))
+                }
+              />
+            </div>
+            <div className="ml-11">
+              <button
+                type="button"
+                onClick={() => window.electronAPI?.updateCheck?.()}
+                className="px-3 py-1.5 rounded-md text-[12px] transition-colors"
+                style={{
+                  color: 'var(--claude-warm)',
+                  background: 'var(--sand)',
+                  boxShadow: '0 0 0 1px var(--ring-warm)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--cream)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--sand)';
+                }}
+              >
+                {t('update.checkNow')}
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

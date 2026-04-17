@@ -2,6 +2,7 @@ import { CalendarDays, CalendarRange, Flame, Gauge, Info, Layers } from 'lucide-
 import type React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
+import { CodexCard } from './CodexCard';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -300,9 +301,12 @@ const CircularProgressChart: React.FC<{
 interface DashboardProps {
   stats: UsageStats;
   status: 'safe' | 'warning' | 'critical';
+  // Whether to render the secondary Codex CLI card below the Claude stats.
+  // Off by default; user opts in from Settings.
+  showCodex?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }) => {
   const { t } = useTranslation();
   const { getStatusColor, getStatusIcon } = getStatusHelpers(status);
   const statusWord =
@@ -499,6 +503,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
             </div>
           </StatCard>
         </div>
+
+        {/* Codex CLI — opt-in from Settings. The card itself also self-hides
+            if ~/.codex/sessions is missing, so toggling on without Codex
+            installed is a no-op instead of a broken card. */}
+        {showCodex && <CodexCard />}
 
         {/* Model Breakdown */}
         <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">

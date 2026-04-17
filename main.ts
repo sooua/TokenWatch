@@ -2,18 +2,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  BrowserWindow,
-  Menu,
-  Tray,
-  app,
-  ipcMain,
-  nativeImage,
-  screen,
-} from 'electron';
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen } from 'electron';
+import electronUpdater from 'electron-updater';
 import { CCUsageService } from './src/services/ccusageService.js';
+import { CodexService } from './src/services/codexService.js';
 import { NotificationService } from './src/services/notificationService.js';
 import { SettingsService } from './src/services/settingsService.js';
+
+const { autoUpdater } = electronUpdater;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +72,7 @@ class TokenWatchApp {
   private tray: Tray | null = null;
   private window: BrowserWindow | null = null;
   private usageService: CCUsageService;
+  private codexService: CodexService;
   private notificationService: NotificationService;
   private settingsService: SettingsService;
   private updateInterval: NodeJS.Timeout | null = null;
@@ -93,9 +90,12 @@ class TokenWatchApp {
   private miniHudContent: 'percentage' | 'percentageCost' | 'percentageCostBurn' =
     'percentageCost';
   private miniHudSavePositionTimer: NodeJS.Timeout | null = null;
+  private autoUpdateTimer: NodeJS.Timeout | null = null;
+  private autoUpdateInitialized = false;
 
   constructor() {
     this.usageService = CCUsageService.getInstance();
+    this.codexService = CodexService.getInstance();
     this.notificationService = NotificationService.getInstance();
     this.settingsService = SettingsService.getInstance();
   }
@@ -117,6 +117,7 @@ class TokenWatchApp {
     });
 
     this.applyLaunchOnStartup(settings.launchOnStartup === true);
+    this.initAutoUpdate(settings.autoCheckUpdates !== false);
 
     this.createTray();
     this.createWindow();
@@ -317,6 +318,83 @@ class TokenWatchApp {
   private emitProgress(payload: { stage: string; message: string }) {
     if (this.window && !this.window.isDestroyed()) {
       this.window.webContents.send('usage-loading-progress', payload);
+    }
+  }
+
+  // --- Auto-update (electron-updater against GitHub Releases) -------------
+  // Only active in a packaged build — in dev there's no installed copy to
+  // replace. Events are forwarded to the renderer so the UI can show a banner
+  // and progress.
+
+  private initAutoUpdate(enabled: boolean) {
+    if (!app.isPackaged) return;
+
+    if (!this.autoUpdateInitialized) {
+      autoUpdater.autoDownload = false; // User confirms before the download starts
+      autoUpdater.autoInstallOnAppQuit = true;
+
+      autoUpdater.on('checking-for-update', () => this.emitUpdate({ status: 'checking' }));
+      autoUpdater.on('update-available', (info) =>
+        this.emitUpdate({
+          status: 'available',
+          version: info?.version,
+          releaseNotes:
+            typeof info?.releaseNotes === 'string' ? info.releaseNotes : undefined,
+          releaseDate: info?.releaseDate,
+        })
+      );
+      autoUpdater.on('update-not-available', () =>
+        this.emitUpdate({ status: 'not-available' })
+      );
+      autoUpdater.on('download-progress', (progress) =>
+        this.emitUpdate({
+          status: 'downloading',
+          percent: progress.percent,
+          bytesPerSecond: progress.bytesPerSecond,
+          transferred: progress.transferred,
+          total: progress.total,
+        })
+      );
+      autoUpdater.on('update-downloaded', (info) =>
+        this.emitUpdate({ status: 'downloaded', version: info?.version })
+      );
+      autoUpdater.on('error', (err) =>
+        this.emitUpdate({ status: 'error', error: err?.message || String(err) })
+      );
+
+      this.autoUpdateInitialized = true;
+    }
+
+    // Clear any existing periodic check before re-arming with the current
+    // preference — the setting can flip at runtime.
+    if (this.autoUpdateTimer) {
+      clearInterval(this.autoUpdateTimer);
+      this.autoUpdateTimer = null;
+    }
+
+    if (enabled) {
+      // First check runs shortly after boot so it doesn't compete with
+      // ccusage's cold-start parsing for network bandwidth.
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch((err) => {
+          console.error('Initial update check failed:', err);
+        });
+      }, 15_000);
+
+      this.autoUpdateTimer = setInterval(
+        () => {
+          autoUpdater.checkForUpdates().catch((err) => {
+            console.error('Periodic update check failed:', err);
+          });
+        },
+        4 * 60 * 60 * 1000 // 4 hours
+      );
+    }
+  }
+
+  private emitUpdate(payload: Record<string, unknown>) {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('update-status', payload);
     }
   }
 
@@ -599,6 +677,34 @@ class TokenWatchApp {
     ipcMain.handle('mini-hud-open-main', () => {
       this.showWindow();
     });
+    // Auto-update — renderer can trigger a check, start the download after
+    // we've announced an available version, or install what's already
+    // downloaded.
+    ipcMain.handle('update-check', async () => {
+      if (!app.isPackaged) {
+        this.emitUpdate({ status: 'not-available', info: 'dev build' });
+        return;
+      }
+      try {
+        await autoUpdater.checkForUpdates();
+      } catch (err) {
+        console.error('update-check failed:', err);
+        this.emitUpdate({ status: 'error', error: (err as Error)?.message || String(err) });
+      }
+    });
+    ipcMain.handle('update-download', async () => {
+      try {
+        await autoUpdater.downloadUpdate();
+      } catch (err) {
+        console.error('update-download failed:', err);
+        this.emitUpdate({ status: 'error', error: (err as Error)?.message || String(err) });
+      }
+    });
+    ipcMain.handle('update-install', () => {
+      this.isQuitting = true;
+      autoUpdater.quitAndInstall(false, true);
+    });
+
     ipcMain.handle('mini-hud-close', () => {
       // Called by the close-button inside the HUD itself. Persist the flip so
       // the HUD stays off across relaunches.
@@ -615,6 +721,15 @@ class TokenWatchApp {
       } catch (error) {
         console.error('Error getting usage stats:', error);
         throw error;
+      }
+    });
+
+    ipcMain.handle('get-codex-stats', async () => {
+      try {
+        return await this.codexService.getStats();
+      } catch (error) {
+        console.error('Error getting codex stats:', error);
+        return { installed: false } as const;
       }
     });
 
@@ -700,6 +815,10 @@ class TokenWatchApp {
 
         if (typeof settings.launchOnStartup === 'boolean') {
           this.applyLaunchOnStartup(settings.launchOnStartup);
+        }
+
+        if (typeof settings.autoCheckUpdates === 'boolean') {
+          this.initAutoUpdate(settings.autoCheckUpdates);
         }
 
         if (typeof settings.miniHud === 'boolean' && settings.miniHud !== this.miniHudEnabled) {

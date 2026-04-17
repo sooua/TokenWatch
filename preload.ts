@@ -5,6 +5,7 @@ type LoadingProgressPayload = { stage: string; message: string };
 const electronAPI = {
   getUsageStats: () => ipcRenderer.invoke('get-usage-stats'),
   getCachedUsageStats: () => ipcRenderer.invoke('get-cached-usage-stats'),
+  getCodexStats: () => ipcRenderer.invoke('get-codex-stats'),
   refreshData: () => ipcRenderer.invoke('refresh-data'),
   quitApp: () => ipcRenderer.invoke('quit-app'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
@@ -44,6 +45,17 @@ const electronAPI = {
   },
   removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) =>
     ipcRenderer.removeListener('mini-hud-content-changed', listener),
+  // Auto-update
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateDownload: () => ipcRenderer.invoke('update-download'),
+  updateInstall: () => ipcRenderer.invoke('update-install'),
+  onUpdateStatus: (callback: (payload: Record<string, unknown>) => void) => {
+    const listener = (_event: unknown, payload: Record<string, unknown>) => callback(payload);
+    ipcRenderer.on('update-status', listener);
+    return listener;
+  },
+  removeUpdateStatusListener: (listener: (...args: unknown[]) => void) =>
+    ipcRenderer.removeListener('update-status', listener),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

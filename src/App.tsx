@@ -13,6 +13,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { TerminalView } from './components/TerminalView';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
+import { UpdateBanner } from './components/UpdateBanner';
 import type { UsageStats } from './types/usage';
 
 type ViewType = 'dashboard' | 'live' | 'analytics' | 'terminal' | 'settings';
@@ -165,6 +166,8 @@ interface AppState {
     language?: 'auto' | 'en' | 'zh';
     miniHud?: boolean;
     miniHudContent?: 'percentage' | 'percentageCost' | 'percentageCostBurn';
+    autoCheckUpdates?: boolean;
+    showCodexCard?: boolean;
   };
 }
 
@@ -638,6 +641,7 @@ const App: React.FC = () => {
           area is the only scroll container. This avoids sticky-positioning
           games so the header can never drift on scroll. */}
       <div className="relative flex flex-col h-screen overflow-hidden">
+        <UpdateBanner />
         <header
           className="flex-shrink-0 pl-5 pr-3 pt-5 pb-0 z-40"
           // Whole header strip is the drag region. Interactive bits inside
@@ -753,7 +757,11 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto px-3 pt-4 pb-3">
           <div className="space-y-3">
             {state.currentView === 'dashboard' && (
-              <Dashboard stats={currentStats} status={usageStatus} />
+              <Dashboard
+                stats={currentStats}
+                status={usageStatus}
+                showCodex={state.preferences.showCodexCard === true}
+              />
             )}
 
             {state.currentView === 'analytics' && (
