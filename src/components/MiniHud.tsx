@@ -104,16 +104,18 @@ export const MiniHud: React.FC = () => {
       // Fills the whole frameless window. Drag region lets users pull it
       // around; interactive controls explicitly opt out below.
       className="w-screen h-screen flex items-center px-3 gap-3"
-      style={{
-        background: 'rgba(250, 249, 245, 0.96)',
-        border: '1px solid var(--cream)',
-        borderRadius: 12,
-        boxShadow: '0 8px 24px rgba(20, 20, 19, 0.12), 0 0 0 1px rgba(20, 20, 19, 0.04)',
-        color: 'var(--claude-black)',
-        WebkitAppRegion: 'drag',
-        cursor: 'grab',
-        overflow: 'hidden',
-      } as React.CSSProperties}
+      style={
+        {
+          background: 'rgba(250, 249, 245, 0.96)',
+          border: '1px solid var(--cream)',
+          borderRadius: 12,
+          boxShadow: '0 8px 24px rgba(20, 20, 19, 0.12), 0 0 0 1px rgba(20, 20, 19, 0.04)',
+          color: 'var(--claude-black)',
+          WebkitAppRegion: 'drag',
+          cursor: 'grab',
+          overflow: 'hidden',
+        } as React.CSSProperties
+      }
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -123,13 +125,15 @@ export const MiniHud: React.FC = () => {
         onClick={() => window.electronAPI?.miniHudOpenMain?.()}
         title="Open TokenWatch"
         className="flex items-center gap-2 flex-shrink-0"
-        style={{
-          WebkitAppRegion: 'no-drag',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-        } as React.CSSProperties}
+        style={
+          {
+            WebkitAppRegion: 'no-drag',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+          } as React.CSSProperties
+        }
       >
         <div className="relative" style={{ width: 36, height: 36 }}>
           <svg width="36" height="36" className="transform -rotate-90">
@@ -162,10 +166,7 @@ export const MiniHud: React.FC = () => {
       </button>
 
       {/* Numeric readouts */}
-      <div
-        className="flex-1 min-w-0 flex flex-col justify-center"
-        style={{ lineHeight: 1.15 }}
-      >
+      <div className="flex-1 min-w-0 flex flex-col justify-center" style={{ lineHeight: 1.15 }}>
         <div className="flex items-baseline gap-1.5">
           <span
             className="font-serif"
@@ -220,19 +221,21 @@ export const MiniHud: React.FC = () => {
           aria-label="Close mini HUD"
           title="Close mini HUD"
           onClick={() => window.electronAPI?.miniHudClose?.()}
-          style={{
-            WebkitAppRegion: 'no-drag',
-            width: 20,
-            height: 20,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 4,
-            color: 'var(--claude-olive)',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          } as React.CSSProperties}
+          style={
+            {
+              WebkitAppRegion: 'no-drag',
+              width: 20,
+              height: 20,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 4,
+              color: 'var(--claude-olive)',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+            } as React.CSSProperties
+          }
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--cream)';
             e.currentTarget.style.color = 'var(--claude-black)';

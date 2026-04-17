@@ -14,6 +14,4 @@ const isMiniHud = viewParam === 'minihud';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 
-root.render(
-  <React.StrictMode>{isMiniHud ? <MiniHud /> : <App />}</React.StrictMode>
-);
+root.render(<React.StrictMode>{isMiniHud ? <MiniHud /> : <App />}</React.StrictMode>);

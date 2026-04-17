@@ -256,9 +256,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
               {preferences.plan === 'Custom' && (
                 <div>
-                  <div className="text-white/70 text-sm mb-2">
-                    {t('settings.customLimitLabel')}
-                  </div>
+                  <div className="text-white/70 text-sm mb-2">{t('settings.customLimitLabel')}</div>
                   <input
                     type="number"
                     min="1000"
@@ -274,9 +272,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder:text-white/50 focus:border-blue-500 focus:outline-none"
                     placeholder={t('settings.customLimitPlaceholder')}
                   />
-                  <div className="text-white/50 text-xs mt-1">
-                    {t('settings.customLimitHint')}
-                  </div>
+                  <div className="text-white/50 text-xs mt-1">{t('settings.customLimitHint')}</div>
                 </div>
               )}
 
@@ -397,9 +393,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               />
               <Switch
                 checked={preferences.miniHud === true}
-                onCheckedChange={(checked) =>
-                  handlePreferenceChange('miniHud', Boolean(checked))
-                }
+                onCheckedChange={(checked) => handlePreferenceChange('miniHud', Boolean(checked))}
               />
             </div>
             {preferences.miniHud && (
@@ -418,9 +412,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="percentage">
-                      {t('settings.miniHudPercentage')}
-                    </SelectItem>
+                    <SelectItem value="percentage">{t('settings.miniHudPercentage')}</SelectItem>
                     <SelectItem value="percentageCost">
                       {t('settings.miniHudPercentageCost')}
                     </SelectItem>

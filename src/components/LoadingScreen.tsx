@@ -12,11 +12,13 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
   return (
     <div
       className="h-screen w-full flex items-center justify-center px-8"
-      style={{
-        background: 'var(--parchment)',
-        // Let users drag / snap the frameless window even while it's loading.
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
+      style={
+        {
+          background: 'var(--parchment)',
+          // Let users drag / snap the frameless window even while it's loading.
+          WebkitAppRegion: 'drag',
+        } as React.CSSProperties
+      }
     >
       <div className="max-w-sm w-full text-center">
         {/* Claude wordmark using the brand terracotta circle */}

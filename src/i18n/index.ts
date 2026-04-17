@@ -11,8 +11,11 @@ export type SupportedLanguage = 'auto' | 'en' | 'zh';
 export function resolveLanguage(pref: SupportedLanguage | undefined): 'en' | 'zh' {
   if (pref === 'en' || pref === 'zh') return pref;
   try {
-    const sys = (navigator?.language || Intl.DateTimeFormat().resolvedOptions().locale || 'en')
-      .toLowerCase();
+    const sys = (
+      navigator?.language ||
+      Intl.DateTimeFormat().resolvedOptions().locale ||
+      'en'
+    ).toLowerCase();
     return sys.startsWith('zh') ? 'zh' : 'en';
   } catch {
     return 'en';

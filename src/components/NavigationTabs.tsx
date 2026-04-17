@@ -32,10 +32,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <nav
-      className={`${className} relative`}
-      style={{ borderBottom: '1px solid var(--cream)' }}
-    >
+    <nav className={`${className} relative`} style={{ borderBottom: '1px solid var(--cream)' }}>
       <div className="flex items-center gap-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -46,13 +43,15 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
               type="button"
               onClick={() => onNavigate(tab.id)}
               className="relative inline-flex items-center gap-2 px-3 py-2 text-sm transition-colors"
-              style={{
-                color: active ? 'var(--claude-black)' : 'var(--claude-olive)',
-                fontWeight: active ? 500 : 400,
-                // Header is the drag region; individual tab buttons need to
-                // opt out so clicks register normally.
-                WebkitAppRegion: 'no-drag',
-              } as React.CSSProperties}
+              style={
+                {
+                  color: active ? 'var(--claude-black)' : 'var(--claude-olive)',
+                  fontWeight: active ? 500 : 400,
+                  // Header is the drag region; individual tab buttons need to
+                  // opt out so clicks register normally.
+                  WebkitAppRegion: 'no-drag',
+                } as React.CSSProperties
+              }
               onMouseEnter={(e) => {
                 if (!active) e.currentTarget.style.color = 'var(--claude-charcoal)';
               }}
@@ -61,9 +60,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
               }}
             >
               <Icon className="w-[15px] h-[15px]" strokeWidth={active ? 2 : 1.75} />
-              <span className="font-sans text-[13px] tracking-tight">
-                {t(`tabs.${tab.tKey}`)}
-              </span>
+              <span className="font-sans text-[13px] tracking-tight">{t(`tabs.${tab.tKey}`)}</span>
               {active && (
                 <span
                   className="absolute left-2 right-2 -bottom-px h-[2px] rounded-full"

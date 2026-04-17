@@ -175,8 +175,7 @@ export const en = {
     customLimitLabel: 'Custom token limit',
     customLimitPlaceholder: 'Enter custom token limit',
     customLimitHint: 'Tokens per day',
-    detectedPlan:
-      'Current detected plan: {{plan}} ({{limit}} tokens/day)',
+    detectedPlan: 'Current detected plan: {{plan}} ({{limit}} tokens/day)',
     display: 'Tray display',
     displayDesc: 'Choose how information is shown in the tray / menu bar',
     displayMode: 'Display mode',
@@ -192,8 +191,7 @@ export const en = {
     costBasisHint:
       "When set to Current session window, the menu bar cost reflects the rolling 5-hour session window instead of today's total.",
     launchStartup: 'Launch on startup',
-    launchStartupDesc:
-      'Start TokenWatch automatically when you sign in, hidden in the tray',
+    launchStartupDesc: 'Start TokenWatch automatically when you sign in, hidden in the tray',
     standalone: 'Standalone window',
     standaloneDesc:
       'Show TokenWatch as a normal resizable window with a taskbar entry. Takes effect next time the window is opened.',

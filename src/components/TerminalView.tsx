@@ -109,7 +109,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
           </span>
         </div>
         <div className="text-[11px]" style={{ color: '#87867f', letterSpacing: '0.02em' }}>
-          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          {new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })}
         </div>
       </div>
 
@@ -231,7 +235,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
           system{' '}
           <span style={{ color: statusTone.color, fontWeight: 500 }}>{statusTone.label}</span>
         </span>
-        <span>session up {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>
+          session up {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
     </div>
   );

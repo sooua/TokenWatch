@@ -253,7 +253,8 @@ const MainChart: React.FC<{
             </h3>
             <p className="text-[12px]" style={{ color: 'var(--claude-olive)' }}>
               {t('analytics.trendSubtitle', {
-                range: timeRange === '7d' ? t('analytics.trendLast7d') : t('analytics.trendLast30d'),
+                range:
+                  timeRange === '7d' ? t('analytics.trendLast7d') : t('analytics.trendLast30d'),
                 chart:
                   chartType === 'area'
                     ? t('analytics.chartArea')
@@ -282,7 +283,12 @@ const MainChart: React.FC<{
 
         <div ref={chartRef} className="relative w-full" style={{ height }}>
           {width > 0 && (
-            <svg width={width} height={height} className="absolute inset-0" style={{ overflow: 'visible' }}>
+            <svg
+              width={width}
+              height={height}
+              className="absolute inset-0"
+              style={{ overflow: 'visible' }}
+            >
               <defs>
                 <linearGradient id="chartArea" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#c96442" stopOpacity={0.22} />
@@ -493,10 +499,7 @@ const MetricCard: React.FC<{
       )}
 
       {progress && (
-        <div
-          className="w-full h-1.5 rounded-full mt-2"
-          style={{ background: 'var(--sand)' }}
-        >
+        <div className="w-full h-1.5 rounded-full mt-2" style={{ background: 'var(--sand)' }}>
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{
@@ -606,18 +609,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
               label={t('analytics.totalTokens7d')}
               value={formatNumber(totalWeekTokens)}
             />
-            <SummaryTile
-              label={t('analytics.totalCost7d')}
-              value={formatCurrency(totalWeekCost)}
-            />
+            <SummaryTile label={t('analytics.totalCost7d')} value={formatCurrency(totalWeekCost)} />
             <SummaryTile
               label={t('analytics.avgDailyTokens')}
               value={formatNumber(Math.round(avgDailyTokens))}
             />
-            <SummaryTile
-              label={t('analytics.avgDailyCost')}
-              value={formatCurrency(avgDailyCost)}
-            />
+            <SummaryTile label={t('analytics.avgDailyCost')} value={formatCurrency(avgDailyCost)} />
           </div>
         </CardContent>
       </Card>

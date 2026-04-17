@@ -226,71 +226,77 @@ const App: React.FC = () => {
   }, []);
 
   // Save settings to storage
-  const saveSettings = useCallback(async (newSettings: Partial<AppState['preferences']>) => {
-    try {
-      if (!window.electronAPI) {
-        throw new Error('Electron API not available');
-      }
+  const saveSettings = useCallback(
+    async (newSettings: Partial<AppState['preferences']>) => {
+      try {
+        if (!window.electronAPI) {
+          throw new Error('Electron API not available');
+        }
 
-      await window.electronAPI.saveSettings(newSettings);
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      addNotification({
-        type: 'error',
-        title: t('toast.settingsSaveFailed'),
-        message: t('toast.settingsSaveFailedDesc'),
-      });
-    }
-  }, [t]);
+        await window.electronAPI.saveSettings(newSettings);
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        addNotification({
+          type: 'error',
+          title: t('toast.settingsSaveFailed'),
+          message: t('toast.settingsSaveFailedDesc'),
+        });
+      }
+    },
+    [t]
+  );
 
   // Load usage stats with enhanced error handling.
   // `showLoading` controls whether the full LoadingScreen blocks the UI while
   // we wait — callers pass false for silent background refreshes so cached
   // data stays visible.
-  const loadUsageStats = useCallback(async (showLoading = true) => {
-    try {
-      if (showLoading) {
-        setState((prev) => ({ ...prev, loading: true, error: null }));
-      }
+  const loadUsageStats = useCallback(
+    async (showLoading = true) => {
+      try {
+        if (showLoading) {
+          setState((prev) => ({ ...prev, loading: true, error: null }));
+        }
 
-      if (!window.electronAPI) {
-        throw new Error('Electron API not available');
-      }
+        if (!window.electronAPI) {
+          throw new Error('Electron API not available');
+        }
 
-      const data = await window.electronAPI.getUsageStats();
+        const data = await window.electronAPI.getUsageStats();
 
-      setState((prev) => ({
-        ...prev,
-        stats: data,
-        loading: false,
-        isStale: false,
-        error: null,
-      }));
+        setState((prev) => ({
+          ...prev,
+          stats: data,
+          loading: false,
+          isStale: false,
+          error: null,
+        }));
 
-      // Add success notification for manual refresh
-      if (!showLoading) {
+        // Add success notification for manual refresh
+        if (!showLoading) {
+          addNotification({
+            type: 'success',
+            title: t('toast.dataRefreshed'),
+            message: t('toast.dataRefreshedDesc'),
+          });
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load usage stats';
+
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          loading: false,
+        }));
+
         addNotification({
-          type: 'success',
-          title: t('toast.dataRefreshed'),
-          message: t('toast.dataRefreshedDesc'),
+          type: 'error',
+          title: t('toast.updateFailed'),
+          message: errorMessage,
         });
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load usage stats';
-
-      setState((prev) => ({
-        ...prev,
-        error: errorMessage,
-        loading: false,
-      }));
-
-      addNotification({
-        type: 'error',
-        title: t('toast.updateFailed'),
-        message: errorMessage,
-      });
-    }
-  }, [t]);
+    },
+    [t]
+  );
 
   // Force refresh data
   const refreshData = useCallback(async () => {
@@ -637,111 +643,107 @@ const App: React.FC = () => {
           // Whole header strip is the drag region. Interactive bits inside
           // (action buttons, window controls, nav tabs) individually opt out
           // via WebkitAppRegion: no-drag so clicks reach them normally.
-          style={{
-            background: 'var(--parchment)',
-            WebkitAppRegion: 'drag',
-          } as React.CSSProperties}
+          style={
+            {
+              background: 'var(--parchment)',
+              WebkitAppRegion: 'drag',
+            } as React.CSSProperties
+          }
         >
+          <div
+            // items-start pulls the right-side controls up to the top of
+            // the row while the logo + stacked title/tagline fill more
+            // vertical space on the left. Drag is inherited from <header>.
+            className="flex items-start justify-between mb-3"
+          >
+            <div className="flex items-center gap-3">
+              {/* TokenWatch brand mark: terracotta disc with serif "T" inside */}
               <div
-                // items-start pulls the right-side controls up to the top of
-                // the row while the logo + stacked title/tagline fill more
-                // vertical space on the left. Drag is inherited from <header>.
-                className="flex items-start justify-between mb-3"
+                className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center"
+                style={{ background: 'var(--terracotta)' }}
               >
-                <div className="flex items-center gap-3">
-                  {/* TokenWatch brand mark: terracotta disc with serif "T" inside */}
-                  <div
-                    className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center"
-                    style={{ background: 'var(--terracotta)' }}
-                  >
-                    <span
-                      className="font-serif leading-none text-white"
-                      style={{ fontSize: '18px' }}
-                    >
-                      T
-                    </span>
-                  </div>
-                  <div>
-                    <h1
-                      className="font-serif leading-none"
-                      style={{
-                        color: 'var(--claude-black)',
-                        fontSize: '20px',
-                        letterSpacing: '-0.005em',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {t('app.title')}
-                    </h1>
-                    <p
-                      className="mt-1 text-[11px]"
-                      style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
-                    >
-                      {t('app.tagline')}
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  // -mt-2 pulls the controls up so their top offset matches
-                  // the right-side padding (pr-3 = 12px), giving the row a
-                  // balanced gutter around the buttons.
-                  className="flex items-center gap-1.5 -mt-2"
-                  style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                <span className="font-serif leading-none text-white" style={{ fontSize: '18px' }}>
+                  T
+                </span>
+              </div>
+              <div>
+                <h1
+                  className="font-serif leading-none"
+                  style={{
+                    color: 'var(--claude-black)',
+                    fontSize: '20px',
+                    letterSpacing: '-0.005em',
+                    fontWeight: 500,
+                  }}
                 >
-                  <span
-                    className="px-2.5 py-1 rounded-md text-[11px] font-medium"
-                    style={{
-                      color: 'var(--claude-olive)',
-                      background: 'var(--sand)',
-                      letterSpacing: '0.02em',
-                    }}
-                  >
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  {t('app.title')}
+                </h1>
+                <p
+                  className="mt-1 text-[11px]"
+                  style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+                >
+                  {t('app.tagline')}
+                </p>
+              </div>
+            </div>
 
-                  <IconButton
-                    onClick={refreshData}
-                    title={t('app.refresh')}
-                    ariaLabel={t('app.refreshAria')}
-                    noDrag
-                  >
-                    <RefreshCw className="w-4 h-4" strokeWidth={1.75} />
-                  </IconButton>
+            <div
+              // -mt-2 pulls the controls up so their top offset matches
+              // the right-side padding (pr-3 = 12px), giving the row a
+              // balanced gutter around the buttons.
+              className="flex items-center gap-1.5 -mt-2"
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            >
+              <span
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium"
+                style={{
+                  color: 'var(--claude-olive)',
+                  background: 'var(--sand)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
 
-                  <IconButton
-                    onClick={takeScreenshot}
-                    title={t('app.screenshot')}
-                    ariaLabel={t('app.screenshotAria')}
-                    noDrag
-                  >
-                    <Camera className="w-4 h-4" strokeWidth={1.75} />
-                  </IconButton>
+              <IconButton
+                onClick={refreshData}
+                title={t('app.refresh')}
+                ariaLabel={t('app.refreshAria')}
+                noDrag
+              >
+                <RefreshCw className="w-4 h-4" strokeWidth={1.75} />
+              </IconButton>
 
-                  {state.preferences.standaloneWindow ? (
-                    <>
-                      {/* Small vertical separator between app actions and
+              <IconButton
+                onClick={takeScreenshot}
+                title={t('app.screenshot')}
+                ariaLabel={t('app.screenshotAria')}
+                noDrag
+              >
+                <Camera className="w-4 h-4" strokeWidth={1.75} />
+              </IconButton>
+
+              {state.preferences.standaloneWindow ? (
+                <>
+                  {/* Small vertical separator between app actions and
                           window controls so the three Windows-style buttons
                           read as a distinct group. */}
-                      <span
-                        className="mx-1 h-5"
-                        style={{ width: 1, background: 'var(--cream)' }}
-                      />
-                      <WindowControls isMaximized={isMaximized} />
-                    </>
-                  ) : (
-                    <IconButton
-                      onClick={() => window.electronAPI?.quitApp()}
-                      title={t('app.quit')}
-                      ariaLabel={t('app.quitAria')}
-                      danger
-                      noDrag
-                    >
-                      <X className="w-4 h-4" strokeWidth={2} />
-                    </IconButton>
-                  )}
-                </div>
-              </div>
+                  <span className="mx-1 h-5" style={{ width: 1, background: 'var(--cream)' }} />
+                  <WindowControls isMaximized={isMaximized} />
+                </>
+              ) : (
+                <IconButton
+                  onClick={() => window.electronAPI?.quitApp()}
+                  title={t('app.quit')}
+                  ariaLabel={t('app.quitAria')}
+                  danger
+                  noDrag
+                >
+                  <X className="w-4 h-4" strokeWidth={2} />
+                </IconButton>
+              )}
+            </div>
+          </div>
 
           {/* Navigation Tabs */}
           <NavigationTabs currentView={state.currentView} onNavigate={navigateTo} />
