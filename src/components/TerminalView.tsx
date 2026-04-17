@@ -1,7 +1,8 @@
+import { ArrowDown, ArrowRight, ArrowUp, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
-import { Button } from './ui/button';
 
 interface TerminalViewProps {
   stats: UsageStats;
@@ -14,233 +15,173 @@ interface TerminalViewProps {
   };
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, preferences }) => {
-  const [animatedPercentage, setAnimatedPercentage] = useState(0);
-  const [animatedTimeProgress, setAnimatedTimeProgress] = useState(0);
+// Claude "dark section" terminal — near-black surface, warm silver text,
+// terracotta prompts and accents. Monospace throughout (that's the whole point),
+// but the chrome is restrained and editorial rather than retro-hacker green.
 
-  // Animate progress bars
+const formatNumber = (num: number) => {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toLocaleString();
+};
+
+const generateBar = (percentage: number, width = 22): string => {
+  const filled = Math.round((percentage / 100) * width);
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+};
+
+export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, preferences }) => {
+  const { t } = useTranslation();
+  const [animatedPercentage, setAnimatedPercentage] = useState(0);
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setAnimatedPercentage(stats.percentageUsed);
-      setAnimatedTimeProgress(getTimeProgress());
-    }, 100);
+    const timer = setTimeout(() => setAnimatedPercentage(stats.percentageUsed), 100);
     return () => clearTimeout(timer);
   }, [stats]);
 
-  const getTimeProgress = (): number => {
-    if (!stats.resetInfo?.timeUntilReset) return 0;
-    const totalCycleDuration = 24 * 60 * 60 * 1000;
-    const timeElapsed = totalCycleDuration - stats.resetInfo.timeUntilReset;
-    return Math.max(0, Math.min(100, (timeElapsed / totalCycleDuration) * 100));
-  };
-
-  const formatTimeUntilReset = (): string => {
-    if (!stats.resetInfo?.timeUntilReset) return 'No reset info';
-    const milliseconds = stats.resetInfo.timeUntilReset;
-    const hours = Math.floor(milliseconds / (1000 * 60 * 60));
-    const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+  const formatPlan = (): string => {
+    const selected = preferences.plan || 'auto';
+    if (selected === 'auto') return `auto (${stats.currentPlan})`;
+    if (selected === 'Custom') {
+      const limit = preferences.customTokenLimit || stats.tokenLimit;
+      return `Custom (${formatNumber(limit)})`;
     }
-    return `${minutes}m`;
+    const limits = { Pro: '7K', Max5: '35K', Max20: '140K' } as const;
+    return `${selected} (${limits[selected as keyof typeof limits]})`;
   };
 
-  const getStatusEmoji = () => {
-    if (stats.percentageUsed >= 90) return '🔴';
-    if (stats.percentageUsed >= 70) return '🟡';
-    return '🟢';
-  };
+  const statusTone =
+    stats.percentageUsed >= 90
+      ? { color: '#d97757', label: t('terminal.criticalLabel') }
+      : stats.percentageUsed >= 70
+        ? { color: '#c96442', label: t('terminal.warningLabel') }
+        : { color: '#7a9b5f', label: t('terminal.normalLabel') };
 
-  const getBurnRateEmoji = () => {
-    if (stats.burnRate > 1000) return '🔥';
-    if (stats.burnRate > 500) return '⚡';
-    return '💤';
-  };
+  const velocityGlyph =
+    stats.velocity?.trend === 'increasing' ? (
+      <ArrowUp className="inline w-3 h-3 -mt-0.5" strokeWidth={2} />
+    ) : stats.velocity?.trend === 'decreasing' ? (
+      <ArrowDown className="inline w-3 h-3 -mt-0.5" strokeWidth={2} />
+    ) : (
+      <ArrowRight className="inline w-3 h-3 -mt-0.5" strokeWidth={2} />
+    );
 
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toLocaleString();
-  };
-
-  const formatPlanDisplay = (): { plan: string; label: string } => {
-    const selectedPlan = preferences.plan || 'auto';
-
-    if (selectedPlan === 'auto') {
-      return {
-        plan: `Auto-detect (${stats.currentPlan})`,
-        label: 'detected',
-      };
-    }
-
-    if (selectedPlan === 'Custom') {
-      const tokenLimit = preferences.customTokenLimit || stats.tokenLimit;
-      return {
-        plan: `Custom (${formatNumber(tokenLimit)})`,
-        label: 'selected',
-      };
-    }
-
-    // For Pro, Max5, Max20
-    const tokenLimits = {
-      Pro: '7K',
-      Max5: '35K',
-      Max20: '140K',
-    };
-
-    return {
-      plan: `Claude ${selectedPlan} (${tokenLimits[selectedPlan as keyof typeof tokenLimits]})`,
-      label: 'selected',
-    };
-  };
-
-  const generateProgressBar = (percentage: number, width = 20): string => {
-    const filled = Math.round((percentage / 100) * width);
-    const empty = width - filled;
-    return '█'.repeat(filled) + '░'.repeat(empty);
-  };
-
-  const generateTimeProgressBar = (percentage: number, width = 20): string => {
-    const filled = Math.round((percentage / 100) * width);
-    const empty = width - filled;
-    return '▓'.repeat(filled) + '▒'.repeat(empty);
-  };
+  const velocityColor =
+    stats.velocity && stats.velocity.trendPercent > 0
+      ? '#d97757'
+      : stats.velocity && stats.velocity.trendPercent < 0
+        ? '#7a9b5f'
+        : '#b0aea5';
 
   return (
-    <div className="font-mono text-sm bg-black/90 rounded-lg border border-green-500/30 p-6 space-y-4">
+    <div
+      className="font-mono rounded-xl p-5 space-y-4"
+      style={{
+        background: '#141413',
+        border: '1px solid #30302e',
+        color: '#b0aea5',
+        fontSize: '13px',
+        lineHeight: 1.55,
+        boxShadow: 'var(--shadow-whisper-md)',
+      }}
+    >
       {/* Header */}
-      <div className="border-b border-green-500/30 pb-4">
-        <div className="flex items-center justify-between">
-          <div className="text-green-400">
-            <span className="text-green-500">┌─</span> Claude Code Usage Monitor{' '}
-            <span className="text-green-500">─┐</span>
-          </div>
-          <div className="text-green-300 text-xs">{new Date().toLocaleTimeString()}</div>
+      <div
+        className="flex items-center justify-between pb-3"
+        style={{ borderBottom: '1px solid #30302e' }}
+      >
+        <div className="flex items-center gap-2">
+          {/* traffic-light-ish but warm */}
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ background: '#c96442', boxShadow: '0 0 0 1px #b0533a' }}
+          />
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ background: '#87867f', boxShadow: '0 0 0 1px #5e5d59' }}
+          />
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ background: '#30302e', boxShadow: '0 0 0 1px #5e5d59' }}
+          />
+          <span className="ml-2 text-[12px]" style={{ color: '#faf9f5' }}>
+            claude-code-monitor
+          </span>
         </div>
-        <div className="text-green-500 text-xs mt-1">└─ Real-time terminal interface ─┘</div>
+        <div className="text-[11px]" style={{ color: '#87867f', letterSpacing: '0.02em' }}>
+          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </div>
       </div>
-      {/* Token Usage Section */}
+
+      {/* Token usage row */}
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          <span className="text-green-400">TOKEN USAGE:</span>
-          <span className="text-white font-bold">{animatedPercentage.toFixed(1)}%</span>
-          <span className="text-2xl">{getStatusEmoji()}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-green-500">[</span>
-          <span className="text-yellow-400 transition-all duration-1000">
-            {generateProgressBar(animatedPercentage)}
+          <span style={{ color: '#87867f' }}>token_usage</span>
+          <span style={{ color: '#faf9f5' }}>
+            <span className="font-serif" style={{ fontSize: '18px', fontWeight: 500 }}>
+              {animatedPercentage.toFixed(1)}
+            </span>
+            <span style={{ color: '#b0aea5' }}>%</span>
           </span>
-          <span className="text-green-500">]</span>
-          <span className="text-gray-400 text-xs">
-            {formatNumber(stats.tokensUsed)}/{formatNumber(stats.tokenLimit)}
+        </div>
+        <div className="flex items-center gap-3 text-[12px]">
+          <span style={{ color: '#5e5d59' }}>[</span>
+          <span style={{ color: statusTone.color, letterSpacing: '-0.02em' }}>
+            {generateBar(animatedPercentage)}
+          </span>
+          <span style={{ color: '#5e5d59' }}>]</span>
+          <span style={{ color: '#87867f', fontVariantNumeric: 'tabular-nums' }}>
+            {formatNumber(stats.tokensUsed)} / {formatNumber(stats.tokenLimit)}
           </span>
         </div>
       </div>
 
-      {/* TODO: Time Progress Section */}
-      {/* <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <span className="text-blue-400">TIME PROGRESS:</span>
-          <span className="text-white font-bold">{getTimeProgress().toFixed(1)}%</span>
-          <span className="text-2xl">⏰</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-blue-500">[</span>
-          <span className="text-cyan-400 transition-all duration-1000">
-            {generateTimeProgressBar(animatedTimeProgress)}
-          </span>
-          <span className="text-blue-500">]</span>
-          <span className="text-gray-400 text-xs">{formatTimeUntilReset()} until reset</span>
-        </div>
-      </div> */}
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 pt-2 border-t border-green-500/20">
-        <div className="space-y-1">
-          <div className="text-orange-400 text-xs">BURN RATE:</div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold">{formatNumber(stats.burnRate)}</span>
-            <span className="text-gray-400 text-xs">tokens/hr</span>
-            <span className="text-lg">{getBurnRateEmoji()}</span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-purple-400 text-xs">PLAN:</div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold">{formatPlanDisplay().plan}</span>
-            <span className="text-gray-400 text-xs">{formatPlanDisplay().label}</span>
-            <span className="text-lg">📊</span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-red-400 text-xs">COST TODAY:</div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold">${stats.today.totalCost.toFixed(3)}</span>
-            <span className="text-gray-400 text-xs">USD</span>
-            <span className="text-lg">💰</span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-yellow-400 text-xs">REMAINING:</div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold">{formatNumber(stats.tokensRemaining)}</span>
-            <span className="text-gray-400 text-xs">tokens</span>
-            <span className="text-lg">📈</span>
-          </div>
-        </div>
+      {/* Stats grid */}
+      <div
+        className="grid grid-cols-2 gap-x-6 gap-y-3 pt-3"
+        style={{ borderTop: '1px solid #30302e' }}
+      >
+        <Row label="burn_rate" value={`${formatNumber(stats.burnRate)} tok/hr`} />
+        <Row label="plan" value={formatPlan()} />
+        <Row label="cost_today" value={`$${stats.today.totalCost.toFixed(3)}`} />
+        <Row label="remaining" value={`${formatNumber(stats.tokensRemaining)} tok`} />
       </div>
-      {/* Session Information */}
+
+      {/* Session tracking */}
       {stats.sessionTracking && (
-        <div className="pt-2 border-t border-green-500/20">
-          <div className="text-cyan-400 text-xs mb-2">SESSION WINDOW (5H):</div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="text-gray-400 text-xs">Active Sessions:</div>
-              <div className="text-white">{stats.sessionTracking.sessionsInWindow} sessions</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-gray-400 text-xs">Window Tokens:</div>
-              <div className="text-white">
-                {formatNumber(stats.sessionTracking.activeWindow.totalTokens)}
-              </div>
-            </div>
+        <div className="pt-3" style={{ borderTop: '1px solid #30302e' }}>
+          <div className="text-[11px] mb-2" style={{ color: '#87867f', letterSpacing: '0.08em' }}>
+            SESSION WINDOW · 5H
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
+            <Row
+              label="active_sessions"
+              value={`${stats.sessionTracking.sessionsInWindow} sessions`}
+            />
+            <Row
+              label="window_tokens"
+              value={formatNumber(stats.sessionTracking.activeWindow.totalTokens)}
+            />
           </div>
         </div>
       )}
-      {/* Velocity Information */}
+
+      {/* Velocity */}
       {stats.velocity && (
-        <div className="pt-2 border-t border-green-500/20">
-          <div className="text-pink-400 text-xs mb-2">VELOCITY ANALYSIS:</div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs">Trend:</span>
-              <span className="text-white">
-                {stats.velocity.trend === 'increasing'
-                  ? '📈'
-                  : stats.velocity.trend === 'decreasing'
-                    ? '📉'
-                    : '➡️'}
-                {stats.velocity.trend}
+        <div className="pt-3" style={{ borderTop: '1px solid #30302e' }}>
+          <div className="text-[11px] mb-2" style={{ color: '#87867f', letterSpacing: '0.08em' }}>
+            VELOCITY
+          </div>
+          <div className="flex items-center gap-6 text-[12px]">
+            <div>
+              <span style={{ color: '#87867f' }}>trend </span>
+              <span style={{ color: velocityColor }} className="inline-flex items-center gap-1">
+                {velocityGlyph} {stats.velocity.trend}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-xs">Change:</span>
-              <span
-                className={`text-sm ${
-                  stats.velocity.trendPercent > 0
-                    ? 'text-red-400'
-                    : stats.velocity.trendPercent < 0
-                      ? 'text-green-400'
-                      : 'text-gray-400'
-                }`}
-              >
+            <div>
+              <span style={{ color: '#87867f' }}>change </span>
+              <span style={{ color: velocityColor, fontVariantNumeric: 'tabular-nums' }}>
                 {stats.velocity.trendPercent > 0 ? '+' : ''}
                 {stats.velocity.trendPercent}%
               </span>
@@ -248,40 +189,69 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
           </div>
         </div>
       )}
-      {/* Command Line Interface */}
-      <div className="pt-4 border-t border-green-500/30">
-        <div className="flex items-center gap-2">
-          <span className="text-green-400">ccmonitor@terminal</span>
-          <span className="text-gray-400">$</span>
-          <Button
+
+      {/* Prompt */}
+      <div className="pt-4" style={{ borderTop: '1px solid #30302e' }}>
+        <div className="flex items-center gap-2 text-[12px]">
+          <span style={{ color: '#c96442' }}>user@tokenwatch</span>
+          <span style={{ color: '#87867f' }}>:</span>
+          <span style={{ color: '#b0aea5' }}>~</span>
+          <span style={{ color: '#87867f' }}>$</span>
+          <button
+            type="button"
             onClick={onRefresh}
-            variant="ghost"
-            size="sm"
-            className="h-auto p-0 text-yellow-400 hover:text-yellow-300 hover:bg-transparent transition-colors"
+            className="inline-flex items-center gap-1.5 transition-colors"
+            style={{ color: '#d97757' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#faf9f5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#d97757';
+            }}
           >
+            <RefreshCw className="w-3 h-3" strokeWidth={1.75} />
             refresh
-          </Button>
-          <span className="text-gray-600">|</span>
-          <span className="text-blue-400">status</span>
-          <span className="text-gray-600">|</span>
-          <span className="text-purple-400">analytics</span>
-          <span className="animate-pulse text-green-400 ml-2">█</span>
+          </button>
+          <span style={{ color: '#c96442' }} className="ml-1 animate-pulse">
+            █
+          </span>
         </div>
       </div>
-      {/* System Status */}
-      <div className="text-xs text-gray-500 pt-2 border-t border-gray-700">
-        <div className="flex justify-between">
-          <span>
-            System:{' '}
-            {stats.percentageUsed >= 90
-              ? 'CRITICAL'
-              : stats.percentageUsed >= 70
-                ? 'WARNING'
-                : 'NORMAL'}
-          </span>
-          <span>Uptime: {new Date().toLocaleTimeString()}</span>
-        </div>
+
+      {/* Footer status bar */}
+      <div
+        className="flex justify-between text-[11px] pt-2"
+        style={{
+          borderTop: '1px solid #30302e',
+          color: '#87867f',
+          letterSpacing: '0.02em',
+        }}
+      >
+        <span>
+          system{' '}
+          <span style={{ color: statusTone.color, fontWeight: 500 }}>{statusTone.label}</span>
+        </span>
+        <span>session up {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </div>
   );
 };
+
+// Editorial key/value row inside the terminal. The label is olive-silver with
+// a trailing dot leader so eye can trace across easily.
+const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex items-baseline gap-2 text-[12px]">
+    <span style={{ color: '#87867f' }}>{label}</span>
+    <span className="flex-1" style={{ color: '#30302e', letterSpacing: '2px', minWidth: 12 }}>
+      {'·'.repeat(30)}
+    </span>
+    <span
+      style={{
+        color: '#faf9f5',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {value}
+    </span>
+  </div>
+);

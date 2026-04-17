@@ -25,6 +25,21 @@ export interface ElectronAPI {
   removeLoadingProgressListener: (listener: (...args: unknown[]) => void) => void;
   loadSettings: () => Promise<any>;
   saveSettings: (settings: Record<string, unknown>) => Promise<{ success: boolean }>;
+  windowMinimize: () => Promise<void>;
+  windowToggleMaximize: () => Promise<boolean>;
+  windowClose: () => Promise<void>;
+  windowIsMaximized: () => Promise<boolean>;
+  onWindowMaximizeChanged: (
+    callback: (isMaximized: boolean) => void
+  ) => (...args: unknown[]) => void;
+  removeWindowMaximizeChangedListener: (listener: (...args: unknown[]) => void) => void;
+  miniHudGetContent: () => Promise<'percentage' | 'percentageCost' | 'percentageCostBurn'>;
+  miniHudOpenMain: () => Promise<void>;
+  miniHudClose: () => Promise<void>;
+  onMiniHudContentChanged: (
+    callback: (content: string) => void
+  ) => (...args: unknown[]) => void;
+  removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) => void;
 }
 
 declare global {

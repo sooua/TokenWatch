@@ -108,13 +108,16 @@ export class CCUsageService {
   private readonly statsCachePath: string;
 
   private worker: Worker | null = null;
-  private pendingWorkerRequests = new Map<number, { resolve: (blocks: SessionBlock[]) => void; reject: (err: Error) => void }>();
+  private pendingWorkerRequests = new Map<
+    number,
+    { resolve: (blocks: SessionBlock[]) => void; reject: (err: Error) => void }
+  >();
   private nextWorkerRequestId = 1;
 
   constructor() {
     this.resetTimeService = ResetTimeService.getInstance();
     this.sessionTracker = SessionTracker.getInstance();
-    this.statsCachePath = path.join(os.homedir(), '.ccseva', 'stats-cache.json');
+    this.statsCachePath = path.join(os.homedir(), '.tokenwatch', 'stats-cache.json');
   }
 
   /**
@@ -131,16 +134,19 @@ export class CCUsageService {
 
     const worker = new Worker(workerPath);
 
-    worker.on('message', (msg: { id: number; ok: boolean; blocks?: SessionBlock[]; error?: string }) => {
-      const pending = this.pendingWorkerRequests.get(msg.id);
-      if (!pending) return;
-      this.pendingWorkerRequests.delete(msg.id);
-      if (msg.ok && msg.blocks) {
-        pending.resolve(msg.blocks);
-      } else {
-        pending.reject(new Error(msg.error || 'Worker returned no blocks'));
+    worker.on(
+      'message',
+      (msg: { id: number; ok: boolean; blocks?: SessionBlock[]; error?: string }) => {
+        const pending = this.pendingWorkerRequests.get(msg.id);
+        if (!pending) return;
+        this.pendingWorkerRequests.delete(msg.id);
+        if (msg.ok && msg.blocks) {
+          pending.resolve(msg.blocks);
+        } else {
+          pending.reject(new Error(msg.error || 'Worker returned no blocks'));
+        }
       }
-    });
+    );
 
     worker.on('error', (err) => {
       console.error('[ccusage worker] error:', err);
@@ -583,7 +589,13 @@ export class CCUsageService {
   }
 
   /**
-   * Convert blocks to daily usage for backward compatibility
+   * Convert session blocks into per-day totals.
+   *
+   * We iterate individual `entries` inside each block (not block.startTime)
+   * so each entry is filed under its own local-date bucket. Using block
+   * start-time instead would lump every entry in a 5-hour block into the
+   * block's opening day, which breaks today's dashboard whenever a session
+   * spans local midnight — a common case in the evening for non-UTC users.
    */
   private convertBlocksToDailyUsage(blocks: SessionBlock[]): DailyUsage[] {
     const dailyMap = new Map<string, DailyUsage>();
@@ -591,34 +603,32 @@ export class CCUsageService {
     for (const block of blocks) {
       if (block.isGap) continue;
 
-      const date = block.startTime.toISOString().split('T')[0];
+      for (const entry of block.entries) {
+        const date = this.toISOStringLocal(entry.timestamp).split('T')[0];
+        let daily = dailyMap.get(date);
+        if (!daily) {
+          daily = { date, totalTokens: 0, totalCost: 0, models: {} };
+          dailyMap.set(date, daily);
+        }
 
-      if (!dailyMap.has(date)) {
-        dailyMap.set(date, {
-          date,
-          totalTokens: 0,
-          totalCost: 0,
-          models: {},
-        });
-      }
+        const entryTokens =
+          entry.usage.inputTokens +
+          entry.usage.outputTokens +
+          entry.usage.cacheCreationInputTokens +
+          entry.usage.cacheReadInputTokens;
+        const entryCost = entry.costUSD ?? 0;
 
-      const daily = dailyMap.get(date);
-      if (daily) {
-        const blockTokens = this.getTotalTokensFromBlock(block);
-        daily.totalTokens += blockTokens;
-        daily.totalCost += block.costUSD;
+        daily.totalTokens += entryTokens;
+        daily.totalCost += entryCost;
 
-        // Aggregate model usage, filtering out synthetic
-        const realModels = block.models.filter((m: string) => m !== '<synthetic>');
-        for (const model of realModels) {
-          if (!daily.models[model]) {
-            daily.models[model] = { tokens: 0, cost: 0 };
+        // Filter synthetic model names — they show up as meta events, not
+        // real API calls, and would pollute the per-model chart.
+        if (entry.model && entry.model !== '<synthetic>') {
+          if (!daily.models[entry.model]) {
+            daily.models[entry.model] = { tokens: 0, cost: 0 };
           }
-          // Approximate token distribution across models
-          const modelTokens = Math.floor(blockTokens / realModels.length);
-          const modelCost = block.costUSD / realModels.length;
-          daily.models[model].tokens += modelTokens;
-          daily.models[model].cost += modelCost;
+          daily.models[entry.model].tokens += entryTokens;
+          daily.models[entry.model].cost += entryCost;
         }
       }
     }
@@ -676,7 +686,9 @@ export class CCUsageService {
 
   private getEmptyDailyUsage(): DailyUsage {
     return {
-      date: new Date().toISOString().split('T')[0],
+      // Must match the local-date convention used by todayStr in parseBlocksData
+      // — otherwise today's fallback row is filed under the wrong key.
+      date: this.toISOStringLocal(new Date()).split('T')[0],
       totalTokens: 0,
       totalCost: 0,
       models: {},

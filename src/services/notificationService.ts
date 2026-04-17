@@ -40,11 +40,11 @@ export class NotificationService {
 
     if (data.status === 'critical' && this.lastWarningLevel !== 'critical') {
       shouldNotify = true;
-      title = '🚨 CCSeva: Usage Critical';
+      title = 'TokenWatch: Usage critical';
       body = `You've used ${Math.round(data.percentageUsed)}% of your tokens. Consider upgrading your plan.`;
     } else if (data.status === 'warning' && this.lastWarningLevel === 'safe') {
       shouldNotify = true;
-      title = '⚠️ CCSeva: Usage Warning';
+      title = 'TokenWatch: Usage warning';
       body = `You've used ${Math.round(data.percentageUsed)}% of your tokens. Monitor your usage carefully.`;
     }
 
@@ -80,7 +80,7 @@ export class NotificationService {
   sendDailySummary(tokensUsed: number, cost: number): void {
     if (!Notification.isSupported()) return;
 
-    const title = '📊 CCSeva: Daily Summary';
+    const title = 'TokenWatch: Daily summary';
     const body = `Today: ${tokensUsed.toLocaleString()} tokens used, $${cost.toFixed(3)} spent`;
 
     this.sendNotification(title, body);

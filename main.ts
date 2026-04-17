@@ -53,12 +53,17 @@ process.on('unhandledRejection', (reason) => {
   }
 });
 
-const APP_USER_MODEL_ID = 'com.ccseva.app';
+const APP_USER_MODEL_ID = 'com.tokenwatch.app';
 if (isWindows) {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
-// Enforce a single running instance. Without this, relaunching CCSeva from a
+// Make sure `app.getName()` returns TokenWatch regardless of where it's read
+// from (package.json, exe metadata). Surfaces in OS-level places like the
+// taskbar thumbnail label, Dock menu title, notifications attribution.
+app.setName('TokenWatch');
+
+// Enforce a single running instance. Without this, relaunching TokenWatch from a
 // shortcut or the installer opens a second tray icon / window while the first
 // one is still hidden, which is confusing and doubles the ccusage workload.
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -67,7 +72,7 @@ if (!hasSingleInstanceLock) {
   process.exit(0);
 }
 
-class CCSevaApp {
+class TokenWatchApp {
   private tray: Tray | null = null;
   private window: BrowserWindow | null = null;
   private usageService: CCUsageService;
@@ -83,6 +88,11 @@ class CCSevaApp {
   private firstFetchDone = false;
   private progressTimer: NodeJS.Timeout | null = null;
   private standaloneWindow = false;
+  private miniHudWindow: BrowserWindow | null = null;
+  private miniHudEnabled = false;
+  private miniHudContent: 'percentage' | 'percentageCost' | 'percentageCostBurn' =
+    'percentageCost';
+  private miniHudSavePositionTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.usageService = CCUsageService.getInstance();
@@ -97,6 +107,8 @@ class CCSevaApp {
     this.menuBarDisplayMode = settings.menuBarDisplayMode || 'alternate';
     this.menuBarCostSource = settings.menuBarCostSource || 'today';
     this.standaloneWindow = settings.standaloneWindow === true;
+    this.miniHudEnabled = settings.miniHud === true;
+    this.miniHudContent = settings.miniHudContent || 'percentageCost';
 
     this.usageService.updateConfiguration({
       plan: settings.plan,
@@ -110,6 +122,10 @@ class CCSevaApp {
     this.createWindow();
     this.setupIPC();
     this.startUsagePolling();
+
+    if (this.miniHudEnabled) {
+      this.createMiniHud(settings.miniHudX, settings.miniHudY);
+    }
 
     if (this.menuBarDisplayMode === 'alternate') {
       this.startDisplayToggle();
@@ -158,7 +174,7 @@ class CCSevaApp {
 
   private createTray() {
     this.tray = new Tray(this.getTrayIconImage());
-    this.tray.setToolTip('CCSeva');
+    this.tray.setToolTip('TokenWatch');
 
     this.updateTrayTitle();
 
@@ -184,7 +200,25 @@ class CCSevaApp {
       { label: pctLabel, enabled: false },
       { label: costLabel, enabled: false },
       { type: 'separator' },
-      { label: 'Open CCSeva', click: () => this.showWindow() },
+      { label: 'Open TokenWatch', click: () => this.showWindow() },
+      {
+        label: 'Mini HUD',
+        type: 'checkbox',
+        checked: this.miniHudEnabled,
+        click: async () => {
+          this.miniHudEnabled = !this.miniHudEnabled;
+          if (this.miniHudEnabled) {
+            const current = await this.settingsService.loadSettings();
+            this.createMiniHud(current.miniHudX, current.miniHudY);
+          } else {
+            this.closeMiniHud();
+          }
+          await this.settingsService
+            .saveSettings({ miniHud: this.miniHudEnabled })
+            .catch((err) => console.error('Failed to persist miniHud:', err));
+          this.rebuildContextMenu();
+        },
+      },
       {
         label: 'Refresh',
         click: async () => {
@@ -293,7 +327,7 @@ class CCSevaApp {
       app.setLoginItemSettings({
         openAtLogin: enabled,
         openAsHidden: true, // start minimized to the tray, not as a visible window
-        name: 'CCSeva',
+        name: 'TokenWatch',
       });
     } catch (error) {
       console.error('Failed to update login item settings:', error);
@@ -305,10 +339,10 @@ class CCSevaApp {
     if (isMac) {
       // macOS shows text directly in the menu bar.
       this.tray.setTitle(label);
-      this.tray.setToolTip(`CCSeva ${label}`);
+      this.tray.setToolTip(`TokenWatch ${label}`);
     } else {
       // Windows/Linux can only show text in the tooltip (hover).
-      this.tray.setToolTip(`CCSeva — ${label}`);
+      this.tray.setToolTip(`TokenWatch — ${label}`);
     }
   }
 
@@ -363,12 +397,16 @@ class CCSevaApp {
       minWidth: 520,
       minHeight: 480,
       show: false,
-      frame: !standalone,
+      // Always frameless — we draw our own Claude-styled title bar inside the
+      // renderer. In standalone mode we add minimize/maximize/close buttons;
+      // in tray popup mode the existing header doubles as the title bar.
+      frame: false,
       resizable: true,
       skipTaskbar: !standalone,
       alwaysOnTop: !standalone,
-      title: 'CCSeva',
+      title: 'TokenWatch',
       icon: tryIcon,
+      backgroundColor: '#f5f4ed', // parchment, avoids white flash on open
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -400,6 +438,16 @@ class CCSevaApp {
       }
     });
 
+    // Notify the renderer whenever the maximized state changes so the title
+    // bar can flip its maximize / restore icon.
+    const emitMaximizeState = () => {
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send('window-maximize-changed', this.window.isMaximized());
+      }
+    };
+    this.window.on('maximize', emitMaximizeState);
+    this.window.on('unmaximize', emitMaximizeState);
+
     this.window.on('closed', () => {
       this.window = null;
     });
@@ -416,7 +464,151 @@ class CCSevaApp {
     this.createWindow();
   }
 
+  // --- Mini HUD ---------------------------------------------------------
+  // A small always-on-top window that shows the live percentage / cost / burn
+  // rate. Off by default; toggled from Settings. Independent of the main
+  // window so users can keep an eye on usage without opening the full app.
+
+  private computeMiniHudBounds(
+    savedX: number | undefined,
+    savedY: number | undefined,
+    width: number,
+    height: number
+  ) {
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const work = display.workArea;
+    const margin = 12;
+
+    if (typeof savedX === 'number' && typeof savedY === 'number') {
+      // Clamp remembered position inside the current work area in case the
+      // display setup changed since last save.
+      const x = Math.min(Math.max(savedX, work.x), work.x + work.width - width);
+      const y = Math.min(Math.max(savedY, work.y), work.y + work.height - height);
+      return { x, y, width, height };
+    }
+
+    // Default anchor: top-right of the primary-ish (cursor-adjacent) display.
+    return {
+      x: work.x + work.width - width - margin,
+      y: work.y + margin,
+      width,
+      height,
+    };
+  }
+
+  private createMiniHud(savedX?: number, savedY?: number) {
+    if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+      this.miniHudWindow.show();
+      return;
+    }
+
+    const width = 220;
+    const height = 64;
+    const bounds = this.computeMiniHudBounds(savedX, savedY, width, height);
+
+    this.miniHudWindow = new BrowserWindow({
+      width,
+      height,
+      x: bounds.x,
+      y: bounds.y,
+      frame: false,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      transparent: true,
+      hasShadow: false,
+      show: false,
+      focusable: false, // don't steal focus from other apps when it redraws
+      backgroundColor: '#00000000',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+    });
+
+    // Visible across virtual desktops / fullscreen apps on macOS.
+    if (isMac) {
+      this.miniHudWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+
+    this.miniHudWindow.loadFile(path.join(__dirname, 'index.html'), {
+      query: { view: 'minihud' },
+    });
+
+    // Persist position after the user drags the HUD. Debounce so we don't
+    // hammer the disk during a drag.
+    this.miniHudWindow.on('moved', () => this.scheduleMiniHudPositionSave());
+
+    this.miniHudWindow.once('ready-to-show', () => {
+      this.miniHudWindow?.show();
+    });
+
+    this.miniHudWindow.on('closed', () => {
+      this.miniHudWindow = null;
+    });
+  }
+
+  private scheduleMiniHudPositionSave() {
+    if (this.miniHudSavePositionTimer) {
+      clearTimeout(this.miniHudSavePositionTimer);
+    }
+    this.miniHudSavePositionTimer = setTimeout(() => {
+      this.miniHudSavePositionTimer = null;
+      if (!this.miniHudWindow || this.miniHudWindow.isDestroyed()) return;
+      const [x, y] = this.miniHudWindow.getPosition();
+      this.settingsService.saveSettings({ miniHudX: x, miniHudY: y }).catch((err) => {
+        console.error('Failed to persist mini HUD position:', err);
+      });
+    }, 400);
+  }
+
+  private closeMiniHud() {
+    if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+      this.miniHudWindow.destroy();
+    }
+    this.miniHudWindow = null;
+  }
+
   private setupIPC() {
+    // Window controls for the custom (frameless) title bar.
+    ipcMain.handle('window-minimize', () => {
+      if (this.window && !this.window.isDestroyed()) this.window.minimize();
+    });
+    ipcMain.handle('window-toggle-maximize', () => {
+      if (!this.window || this.window.isDestroyed()) return false;
+      if (this.window.isMaximized()) this.window.unmaximize();
+      else this.window.maximize();
+      return this.window.isMaximized();
+    });
+    ipcMain.handle('window-close', () => {
+      // Close button behaves like "hide to tray" (handled by the close event
+      // listener in createWindow — it calls preventDefault + hideWindow).
+      if (this.window && !this.window.isDestroyed()) this.window.close();
+    });
+    ipcMain.handle('window-is-maximized', () => {
+      return !!(this.window && !this.window.isDestroyed() && this.window.isMaximized());
+    });
+
+    // Mini HUD: tell the renderer which content mode to show, and respond to
+    // clicks on the HUD by surfacing the main window.
+    ipcMain.handle('mini-hud-get-content', () => this.miniHudContent);
+    ipcMain.handle('mini-hud-open-main', () => {
+      this.showWindow();
+    });
+    ipcMain.handle('mini-hud-close', () => {
+      // Called by the close-button inside the HUD itself. Persist the flip so
+      // the HUD stays off across relaunches.
+      this.miniHudEnabled = false;
+      this.closeMiniHud();
+      this.settingsService.saveSettings({ miniHud: false }).catch((err) => {
+        console.error('Failed to persist miniHud=false:', err);
+      });
+    });
+
     ipcMain.handle('get-usage-stats', async () => {
       try {
         return await this.usageService.getUsageStats();
@@ -510,6 +702,23 @@ class CCSevaApp {
           this.applyLaunchOnStartup(settings.launchOnStartup);
         }
 
+        if (typeof settings.miniHud === 'boolean' && settings.miniHud !== this.miniHudEnabled) {
+          this.miniHudEnabled = settings.miniHud;
+          if (this.miniHudEnabled) {
+            const current = await this.settingsService.loadSettings();
+            this.createMiniHud(current.miniHudX, current.miniHudY);
+          } else {
+            this.closeMiniHud();
+          }
+        }
+
+        if (settings.miniHudContent && settings.miniHudContent !== this.miniHudContent) {
+          this.miniHudContent = settings.miniHudContent;
+          if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+            this.miniHudWindow.webContents.send('mini-hud-content-changed', this.miniHudContent);
+          }
+        }
+
         if (
           typeof settings.standaloneWindow === 'boolean' &&
           settings.standaloneWindow !== this.standaloneWindow
@@ -539,6 +748,9 @@ class CCSevaApp {
 
       if (this.window && !this.window.isDestroyed()) {
         this.window.webContents.send('usage-updated');
+      }
+      if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+        this.miniHudWindow.webContents.send('usage-updated');
       }
     }, 30000);
 
@@ -657,13 +869,13 @@ class CCSevaApp {
   }
 
   private createScreenshotPath(): string {
-    const screenshotsDir = path.join(os.homedir(), 'Pictures', 'CCSeva-Screenshots');
+    const screenshotsDir = path.join(os.homedir(), 'Pictures', 'TokenWatch-Screenshots');
     if (!fs.existsSync(screenshotsDir)) {
       fs.mkdirSync(screenshotsDir, { recursive: true });
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `CCSeva-Screenshot-${timestamp}.png`;
+    const filename = `TokenWatch-Screenshot-${timestamp}.png`;
     return path.join(screenshotsDir, filename);
   }
 
@@ -685,5 +897,5 @@ class CCSevaApp {
   }
 }
 
-const ccSevaApp = new CCSevaApp();
-ccSevaApp.initialize().catch(console.error);
+const tokenWatchApp = new TokenWatchApp();
+tokenWatchApp.initialize().catch(console.error);

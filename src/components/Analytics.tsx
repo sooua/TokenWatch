@@ -1,9 +1,19 @@
+import {
+  Activity,
+  BarChart3,
+  CalendarDays,
+  Clock,
+  Coins,
+  Flame,
+  Gauge,
+  LineChart,
+  Sparkles,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
-import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface AnalyticsProps {
   stats: UsageStats;
@@ -13,204 +23,131 @@ interface AnalyticsProps {
 type ChartTimeRange = '7d' | '30d';
 type ChartType = 'area' | 'line' | 'bar';
 
-// Helper functions extracted to reduce complexity
+// ---------------- helpers ----------------
+
 const formatNumber = (num: number) => {
   if (!num || Number.isNaN(num)) return '0';
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return num.toLocaleString();
 };
 
-const formatCurrency = (amount: number) => {
-  if (!amount || Number.isNaN(amount)) return '$0.000';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 5,
-    maximumFractionDigits: 5,
-  }).format(amount);
-};
+const formatCurrency = (amount: number) =>
+  !amount || Number.isNaN(amount)
+    ? '$0.000'
+    : new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 5,
+      }).format(amount);
 
-const getDepletionText = (stats: UsageStats) => {
-  if (!stats.predictedDepleted || stats.burnRate <= 0) return 'No depletion';
-
+// Translator-aware: returns a localized string from a translator function.
+const getDepletionText = (
+  stats: UsageStats,
+  t: (key: string, opts?: Record<string, unknown>) => string
+) => {
+  if (!stats.predictedDepleted || stats.burnRate <= 0) return t('analytics.depletionNone');
   try {
     const depletionDate = new Date(stats.predictedDepleted);
-    if (Number.isNaN(depletionDate.getTime())) return 'No depletion';
-
-    const now = new Date();
-    const diffTime = depletionDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return 'Already depleted';
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Tomorrow';
-    if (diffDays < 7) return `${diffDays} days`;
-    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks`;
-    return `${Math.ceil(diffDays / 30)} months`;
+    if (Number.isNaN(depletionDate.getTime())) return t('analytics.depletionNone');
+    const diffDays = Math.ceil((depletionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return t('analytics.depletionDone');
+    if (diffDays === 0) return t('analytics.depletionToday');
+    if (diffDays === 1) return t('analytics.depletionTomorrow');
+    if (diffDays < 7) return t('analytics.depletionDays', { count: diffDays });
+    if (diffDays < 30) return t('analytics.depletionWeeks', { count: Math.ceil(diffDays / 7) });
+    return t('analytics.depletionMonths', { count: Math.ceil(diffDays / 30) });
   } catch {
-    return 'No depletion';
+    return t('analytics.depletionNone');
   }
 };
 
-// Separate component for control tabs
-const ControlTabs: React.FC<{
-  timeRange: ChartTimeRange;
-  setTimeRange: (range: ChartTimeRange) => void;
-  chartType: ChartType;
-  setChartType: (type: ChartType) => void;
-  selectedMetric: 'tokens' | 'cost';
-  setSelectedMetric: (metric: 'tokens' | 'cost') => void;
-}> = ({ timeRange, setTimeRange, chartType, setChartType, selectedMetric, setSelectedMetric }) => (
-  <div className="flex flex-wrap gap-3 mb-5">
-    {/* Time Range */}
-    <div className="flex bg-neutral-800/50 rounded-xl p-1 backdrop-blur-sm border border-white/10">
-      {(['7d', '30d'] as ChartTimeRange[]).map((range) => (
-        <Button
-          key={range}
-          onClick={() => setTimeRange(range)}
-          variant="ghost"
-          size="sm"
-          className={`px-3 py-1.5 h-auto rounded-lg text-sm font-medium transition-all ${
-            timeRange === range
-              ? 'bg-blue-500 text-white shadow-lg hover:bg-blue-600'
-              : 'text-neutral-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <svg
-            className="w-4 h-4 inline mr-1.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+// Warm palette for model colors — terracotta family + olive, no rainbow.
+const modelColors = ['#c96442', '#8a6b4a', '#5e5d59', '#b0aea5'];
+
+// ---------------- small pieces ----------------
+
+type SegmentedOption<T extends string> = {
+  value: T;
+  label: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+};
+
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: SegmentedOption<T>[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div
+      className="inline-flex rounded-lg p-0.5"
+      style={{ background: 'var(--sand)', border: '1px solid var(--ring-warm)' }}
+    >
+      {options.map(({ value: v, label, icon: Icon }) => {
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(v)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all text-[12px]"
+            style={{
+              background: active ? 'var(--ivory)' : 'transparent',
+              color: active ? 'var(--claude-black)' : 'var(--claude-olive)',
+              boxShadow: active ? '0 0 0 1px var(--ring-deep)' : 'none',
+              fontWeight: active ? 500 : 400,
+              letterSpacing: '0.02em',
+            }}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-          {range === '7d' ? '7 Days' : '30 Days'}
-        </Button>
-      ))}
+            <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
+            {label}
+          </button>
+        );
+      })}
     </div>
+  );
+}
 
-    {/* Chart Type */}
-    <div className="flex bg-neutral-800/50 rounded-xl p-1 backdrop-blur-sm border border-white/10">
-      {(
-        [
-          {
-            type: 'area',
-            label: 'Area',
-            icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9',
-          },
-          { type: 'line', label: 'Line', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-          {
-            type: 'bar',
-            label: 'Bar',
-            icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10',
-          },
-        ] as { type: ChartType; label: string; icon: string }[]
-      ).map(({ type, label, icon }) => (
-        <Button
-          key={type}
-          onClick={() => setChartType(type)}
-          variant="ghost"
-          size="sm"
-          className={`px-3 py-1.5 h-auto rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-            chartType === type
-              ? 'bg-purple-500 text-white shadow-lg hover:bg-purple-600'
-              : 'text-neutral-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
-          </svg>
-          {label}
-        </Button>
-      ))}
+const SummaryTile: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div
+    className="px-3 py-3 rounded-lg"
+    style={{
+      background: 'var(--parchment)',
+      border: '1px solid var(--cream)',
+    }}
+  >
+    <div
+      className="font-serif leading-none"
+      style={{
+        color: 'var(--claude-black)',
+        fontSize: '20px',
+        fontWeight: 500,
+        letterSpacing: '-0.01em',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {value}
     </div>
-
-    {/* Metric Toggle */}
-    <div className="flex bg-neutral-800/50 rounded-xl p-1 backdrop-blur-sm border border-white/10">
-      {(
-        [
-          { metric: 'tokens', label: 'Tokens', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-          {
-            metric: 'cost',
-            label: 'Cost',
-            icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1',
-          },
-        ] as { metric: 'tokens' | 'cost'; label: string; icon: string }[]
-      ).map(({ metric, label, icon }) => (
-        <Button
-          key={metric}
-          onClick={() => setSelectedMetric(metric)}
-          variant="ghost"
-          size="sm"
-          className={`px-3 py-1.5 h-auto rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-            selectedMetric === metric
-              ? 'bg-emerald-500 text-white shadow-lg hover:bg-emerald-600'
-              : 'text-neutral-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
-          </svg>
-          {label}
-        </Button>
-      ))}
+    <div
+      className="text-[11px] mt-1.5"
+      style={{ color: 'var(--claude-olive)', letterSpacing: '0.02em' }}
+    >
+      {label}
     </div>
   </div>
 );
 
-// Summary stats component
-const SummaryStats: React.FC<{
-  totalWeekTokens: number;
-  totalWeekCost: number;
-  avgDailyTokens: number;
-  avgDailyCost: number;
-}> = ({ totalWeekTokens, totalWeekCost, avgDailyTokens, avgDailyCost }) => (
-  <div className="grid grid-cols-4 gap-3">
-    <Card className="bg-neutral-900/50 border-neutral-800">
-      <CardContent className="p-3 text-center">
-        <div className="text-xl font-bold text-white mb-1">{formatNumber(totalWeekTokens)}</div>
-        <div className="text-xs text-neutral-400">Total Tokens (7d)</div>
-      </CardContent>
-    </Card>
-    <Card className="bg-neutral-900/50 border-neutral-800">
-      <CardContent className="p-3 text-center">
-        <div className="text-xl font-bold text-white mb-1">{formatCurrency(totalWeekCost)}</div>
-        <div className="text-xs text-neutral-400">Total Cost (7d)</div>
-      </CardContent>
-    </Card>
-    <Card className="bg-neutral-900/50 border-neutral-800">
-      <CardContent className="p-3 text-center">
-        <div className="text-xl font-bold text-white mb-1">
-          {formatNumber(Math.round(avgDailyTokens))}
-        </div>
-        <div className="text-xs text-neutral-400">Avg Daily Tokens</div>
-      </CardContent>
-    </Card>
-    <Card className="bg-neutral-900/50 border-neutral-800">
-      <CardContent className="p-3 text-center">
-        <div className="text-xl font-bold text-white mb-1">{formatCurrency(avgDailyCost)}</div>
-        <div className="text-xs text-neutral-400">Avg Daily Cost</div>
-      </CardContent>
-    </Card>
-  </div>
-);
+// ---------------- hooks ----------------
 
-// Hook for chart data processing
-const useChartData = (stats: UsageStats, timeRange: ChartTimeRange) => {
-  return useMemo(() => {
+const useChartData = (stats: UsageStats, timeRange: ChartTimeRange) =>
+  useMemo(() => {
     const rawData = timeRange === '7d' ? stats.thisWeek : stats.thisMonth;
-
     return rawData.map((day, index) => ({
-      date: new Date(day.date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
       shortDate: new Date(day.date).toLocaleDateString('en-US', {
         month: 'numeric',
         day: 'numeric',
@@ -221,99 +158,53 @@ const useChartData = (stats: UsageStats, timeRange: ChartTimeRange) => {
       dayIndex: index,
     }));
   }, [stats, timeRange]);
-};
 
-// Hook for model breakdown data
-const useModelBreakdownData = (stats: UsageStats) => {
-  return useMemo(() => {
+const useModelBreakdown = (stats: UsageStats) =>
+  useMemo(() => {
     const today = stats.today;
-    if (!today.models || Object.keys(today.models).length === 0) {
-      return [];
-    }
-
+    if (!today.models || Object.keys(today.models).length === 0) return [];
     return Object.entries(today.models).map(([model, data], index) => ({
       name: model
-        .replace('claude-3-5-', '')
-        .replace('claude-3-', '')
-        .replace('sonnet-4-', 'Sonnet 4-')
-        .replace('sonnet', 'Sonnet')
+        .replace(/^claude-/, '')
+        .replace(/-(\d{8}.*)?$/, '')
         .replace('opus', 'Opus')
+        .replace('sonnet', 'Sonnet')
         .replace('haiku', 'Haiku')
-        .replace('20250514', '')
         .trim(),
       value: data.tokens,
       cost: data.cost,
       percentage: today.totalTokens > 0 ? (data.tokens / today.totalTokens) * 100 : 0,
-      color: index === 0 ? '#8B5CF6' : index === 1 ? '#3B82F6' : '#10B981',
+      color: modelColors[index % modelColors.length],
     }));
   }, [stats]);
-};
 
-// Chart path generation utility
-const generateChartPath = (
-  chartData: ReturnType<typeof useChartData>,
-  chartType: ChartType,
-  selectedMetric: 'tokens' | 'cost',
-  maxValue: number,
-  padding: number,
-  plotWidth: number,
-  plotHeight: number
-) => {
-  if (chartData.length === 0 || plotWidth <= 0 || plotHeight <= 0) return '';
-
-  const points = chartData.map((d, i) => {
-    const x = padding + (i / Math.max(chartData.length - 1, 1)) * plotWidth;
-    const value = selectedMetric === 'tokens' ? d.totalTokens : d.totalCost;
-    const normalizedValue = maxValue > 0 ? value / maxValue : 0;
-    const y = padding + plotHeight - normalizedValue * plotHeight;
-    return { x, y, value };
-  });
-
-  if (chartType === 'area') {
-    const pathData = points
-      .map((point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-      .join(' ');
-
-    return `${pathData} L ${points[points.length - 1]?.x || padding} ${padding + plotHeight} L ${padding} ${padding + plotHeight} Z`;
-  }
-
-  if (chartType === 'line') {
-    return points.map((point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
-  }
-
-  return '';
-};
-
-// Custom hook for chart dimensions
 const useChartDimensions = () => {
-  const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 240 });
-  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [dim, setDim] = useState({ width: 0, height: 220 });
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const updateDimensions = () => {
-      if (chartContainerRef.current) {
-        const { clientWidth } = chartContainerRef.current;
-        setChartDimensions({ width: clientWidth, height: 240 });
-      }
+    const update = () => {
+      if (ref.current) setDim({ width: ref.current.clientWidth, height: 220 });
     };
-
-    updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, []);
 
-  return { chartDimensions, chartContainerRef };
+  return { dim, ref };
 };
 
-// Main Chart Component
+// ---------------- chart ----------------
+
 const MainChart: React.FC<{
   chartData: ReturnType<typeof useChartData>;
   chartType: ChartType;
   selectedMetric: 'tokens' | 'cost';
   timeRange: ChartTimeRange;
-  chartDimensions: { width: number; height: number };
-  chartContainerRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ chartData, chartType, selectedMetric, timeRange, chartDimensions, chartContainerRef }) => {
+  dim: { width: number; height: number };
+  chartRef: React.RefObject<HTMLDivElement | null>;
+}> = ({ chartData, chartType, selectedMetric, timeRange, dim, chartRef }) => {
+  const { t } = useTranslation();
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 1;
     const values = chartData.map((d) =>
@@ -323,191 +214,185 @@ const MainChart: React.FC<{
     return max > 0 ? max : 1;
   }, [chartData, selectedMetric]);
 
-  const chartWidth = chartDimensions.width;
-  const chartHeight = chartDimensions.height;
-  const padding = 40;
-  const plotWidth = chartWidth - padding * 2;
-  const plotHeight = chartHeight - padding * 2;
+  const width = dim.width;
+  const height = dim.height;
+  const padding = { top: 16, right: 16, bottom: 28, left: 44 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 0);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 0);
 
-  const chartPath = generateChartPath(
-    chartData,
-    chartType,
-    selectedMetric,
-    maxValue,
-    padding,
-    plotWidth,
-    plotHeight
-  );
+  const points = chartData.map((d, i) => {
+    const x = padding.left + (i / Math.max(chartData.length - 1, 1)) * plotWidth;
+    const value = selectedMetric === 'tokens' ? d.totalTokens : d.totalCost;
+    const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+    return { x, y, value };
+  });
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath =
+    points.length === 0
+      ? ''
+      : `${linePath} L ${points[points.length - 1].x} ${padding.top + plotHeight} L ${padding.left} ${padding.top + plotHeight} Z`;
 
   return (
     <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold text-white mb-1">
-              {selectedMetric === 'tokens' ? 'Token Usage' : 'Cost'} Trends
+            <h3
+              className="font-serif mb-1"
+              style={{
+                color: 'var(--claude-black)',
+                fontSize: '18px',
+                fontWeight: 500,
+                letterSpacing: '-0.005em',
+              }}
+            >
+              {selectedMetric === 'tokens'
+                ? t('analytics.trendTitleTokens')
+                : t('analytics.trendTitleCost')}
             </h3>
-            <p className="text-sm text-neutral-400">
-              {timeRange === '7d' ? 'Last 7 days' : 'Last 30 days'} • {chartType} visualization
+            <p className="text-[12px]" style={{ color: 'var(--claude-olive)' }}>
+              {t('analytics.trendSubtitle', {
+                range: timeRange === '7d' ? t('analytics.trendLast7d') : t('analytics.trendLast30d'),
+                chart:
+                  chartType === 'area'
+                    ? t('analytics.chartArea')
+                    : chartType === 'line'
+                      ? t('analytics.chartLine')
+                      : t('analytics.chartBar'),
+              })}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="glass px-3 py-1 rounded-lg">
-              <span className="text-xs text-neutral-300">
-                Max:{' '}
-                {selectedMetric === 'tokens' ? formatNumber(maxValue) : formatCurrency(maxValue)}
-              </span>
-            </div>
-          </div>
+          <span
+            className="px-2.5 py-1 rounded-md text-[11px]"
+            style={{
+              color: 'var(--claude-olive)',
+              background: 'var(--sand)',
+              letterSpacing: '0.02em',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {t('analytics.max', {
+              value:
+                selectedMetric === 'tokens' ? formatNumber(maxValue) : formatCurrency(maxValue),
+            })}
+          </span>
         </div>
 
-        {/* Chart Container */}
-        <div ref={chartContainerRef} className="relative w-full" style={{ height: chartHeight }}>
-          {chartWidth > 0 && (
-            <svg
-              width={chartWidth}
-              height={chartHeight}
-              className="absolute inset-0"
-              style={{ overflow: 'visible' }}
-            >
+        <div ref={chartRef} className="relative w-full" style={{ height }}>
+          {width > 0 && (
+            <svg width={width} height={height} className="absolute inset-0" style={{ overflow: 'visible' }}>
               <defs>
-                <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop
-                    offset="0%"
-                    stopColor={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                    stopOpacity={0.3}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                    stopOpacity={0.05}
-                  />
+                <linearGradient id="chartArea" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#c96442" stopOpacity={0.22} />
+                  <stop offset="100%" stopColor="#c96442" stopOpacity={0.03} />
                 </linearGradient>
               </defs>
 
-              {/* Grid Lines */}
+              {/* Grid lines — warm border cream */}
               {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
                 <line
                   key={`grid-${ratio}`}
-                  x1={padding}
-                  y1={padding + plotHeight * ratio}
-                  x2={chartWidth - padding}
-                  y2={padding + plotHeight * ratio}
-                  stroke="rgba(255, 255, 255, 0.1)"
-                  strokeDasharray="2,2"
+                  x1={padding.left}
+                  y1={padding.top + plotHeight * ratio}
+                  x2={padding.left + plotWidth}
+                  y2={padding.top + plotHeight * ratio}
+                  stroke="#e8e6dc"
+                  strokeDasharray={ratio === 1 ? undefined : '3,3'}
+                  strokeWidth={ratio === 1 ? 1 : 1}
                 />
               ))}
 
-              {/* Y-Axis Labels */}
+              {/* Y-axis labels */}
               {[1, 0.75, 0.5, 0.25, 0].map((ratio) => {
                 const value = maxValue * ratio;
-                const y = padding + plotHeight * (1 - ratio);
-                const displayValue =
+                const y = padding.top + plotHeight * (1 - ratio);
+                const display =
                   selectedMetric === 'tokens' ? formatNumber(value) : formatCurrency(value);
-
                 return (
                   <text
-                    key={`y-label-${ratio}`}
-                    x={padding - 8}
-                    y={y + 4}
+                    key={`ylab-${ratio}`}
+                    x={padding.left - 8}
+                    y={y + 3}
                     textAnchor="end"
-                    className="fill-neutral-400 text-xs"
+                    fontSize="10"
+                    fill="#87867f"
+                    fontFamily="inherit"
                   >
-                    {displayValue}
+                    {display}
                   </text>
                 );
               })}
 
-              {/* Chart Data */}
-              {chartData.length > 0 && (
-                <>
-                  {chartType === 'area' && chartPath && (
-                    <path
-                      d={chartPath}
-                      fill="url(#chartGradient)"
-                      stroke={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                      strokeWidth="2"
-                    />
-                  )}
-
-                  {chartType === 'line' && chartPath && (
-                    <path
-                      d={chartPath}
-                      fill="none"
-                      stroke={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-
-                  {chartType === 'bar' &&
-                    chartData.map((d, i) => {
-                      const barWidth = (plotWidth / chartData.length) * 0.7;
-                      const x =
-                        padding +
-                        (i * plotWidth) / chartData.length +
-                        (plotWidth / chartData.length - barWidth) / 2;
-                      const value = selectedMetric === 'tokens' ? d.totalTokens : d.totalCost;
-                      const normalizedValue = maxValue > 0 ? value / maxValue : 0;
-                      const barHeight = normalizedValue * plotHeight;
-                      const y = padding + plotHeight - barHeight;
-
-                      return (
-                        <rect
-                          key={`bar-${d.fullDate}-${d.dayIndex}`}
-                          x={x}
-                          y={y}
-                          width={barWidth}
-                          height={barHeight}
-                          fill={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                          rx="4"
-                        />
-                      );
-                    })}
-
-                  {/* Data Points */}
-                  {chartType !== 'bar' &&
-                    chartData.map((d, i) => {
-                      const x = padding + (i / Math.max(chartData.length - 1, 1)) * plotWidth;
-                      const value = selectedMetric === 'tokens' ? d.totalTokens : d.totalCost;
-                      const normalizedValue = maxValue > 0 ? value / maxValue : 0;
-                      const y = padding + plotHeight - normalizedValue * plotHeight;
-
-                      return (
-                        <circle
-                          key={`point-${d.fullDate}-${d.dayIndex}`}
-                          cx={x}
-                          cy={y}
-                          r="4"
-                          fill={selectedMetric === 'tokens' ? '#3B82F6' : '#10B981'}
-                          stroke="white"
-                          strokeWidth="2"
-                          className="hover:r-6 transition-all cursor-pointer"
-                        />
-                      );
-                    })}
-                </>
+              {chartType === 'area' && areaPath && (
+                <path d={areaPath} fill="url(#chartArea)" stroke="#c96442" strokeWidth="1.75" />
               )}
+              {chartType === 'line' && linePath && (
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke="#c96442"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              {chartType === 'bar' &&
+                chartData.map((d, i) => {
+                  const barWidth = (plotWidth / Math.max(chartData.length, 1)) * 0.6;
+                  const x =
+                    padding.left +
+                    (i * plotWidth) / Math.max(chartData.length, 1) +
+                    (plotWidth / Math.max(chartData.length, 1) - barWidth) / 2;
+                  const value = selectedMetric === 'tokens' ? d.totalTokens : d.totalCost;
+                  const barHeight = (value / maxValue) * plotHeight;
+                  const y = padding.top + plotHeight - barHeight;
+                  return (
+                    <rect
+                      key={`bar-${d.fullDate}-${d.dayIndex}`}
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill="#c96442"
+                      rx="2"
+                    />
+                  );
+                })}
 
-              {/* X-Axis Labels */}
+              {/* Data points on area/line charts */}
+              {chartType !== 'bar' &&
+                points.map((p, i) => (
+                  <circle
+                    key={`pt-${chartData[i]?.fullDate}-${i}`}
+                    cx={p.x}
+                    cy={p.y}
+                    r="3"
+                    fill="#faf9f5"
+                    stroke="#c96442"
+                    strokeWidth="1.75"
+                  />
+                ))}
+
+              {/* X-axis labels — every Nth to avoid overlap */}
               {chartData.map((d, i) => {
+                if (chartData.length > 10 && i % Math.ceil(chartData.length / 8) !== 0) return null;
                 const x =
                   chartType === 'bar'
-                    ? padding +
-                      (i * plotWidth) / chartData.length +
-                      plotWidth / chartData.length / 2
-                    : padding + (i / Math.max(chartData.length - 1, 1)) * plotWidth;
-                const y = chartHeight - 10;
-
+                    ? padding.left +
+                      (i * plotWidth) / Math.max(chartData.length, 1) +
+                      plotWidth / Math.max(chartData.length, 1) / 2
+                    : padding.left + (i / Math.max(chartData.length - 1, 1)) * plotWidth;
                 return (
                   <text
-                    key={`label-${d.fullDate}-${d.dayIndex}`}
+                    key={`xlab-${d.fullDate}-${i}`}
                     x={x}
-                    y={y}
+                    y={height - 8}
                     textAnchor="middle"
-                    className="fill-neutral-400 text-xs"
+                    fontSize="10"
+                    fill="#87867f"
+                    fontFamily="inherit"
                   >
                     {d.shortDate}
                   </text>
@@ -516,24 +401,11 @@ const MainChart: React.FC<{
             </svg>
           )}
 
-          {/* Empty State */}
           {chartData.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-neutral-400">
-                <svg
-                  className="w-16 h-16 mx-auto mb-4 opacity-50"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                <p className="text-sm">No data available</p>
+              <div className="text-center" style={{ color: 'var(--claude-stone)' }}>
+                <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-40" strokeWidth={1.25} />
+                <p className="text-[13px]">{t('analytics.noData')}</p>
               </div>
             </div>
           )}
@@ -543,409 +415,431 @@ const MainChart: React.FC<{
   );
 };
 
+// ---------------- small metric card ----------------
+
+const MetricCard: React.FC<{
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+  detail?: string;
+  badge?: { text: string; tone: 'normal' | 'warning' | 'critical' };
+  progress?: { pct: number; tone: 'normal' | 'warning' | 'critical' };
+}> = ({ icon, value, label, detail, badge, progress }) => {
+  const tone = badge?.tone ?? progress?.tone ?? 'normal';
+  const toneColor =
+    tone === 'critical'
+      ? 'var(--error-crimson)'
+      : tone === 'warning'
+        ? 'var(--terracotta)'
+        : 'var(--claude-olive)';
+
+  return (
+    <div
+      className="p-4 rounded-xl"
+      style={{
+        background: 'var(--parchment)',
+        border: '1px solid var(--cream)',
+      }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--sand)', color: 'var(--terracotta)' }}
+          >
+            {icon}
+          </div>
+          <div>
+            <div
+              className="font-serif leading-none"
+              style={{
+                color: 'var(--claude-black)',
+                fontSize: '20px',
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {value}
+            </div>
+            <div
+              className="text-[11px] mt-1"
+              style={{ color: 'var(--claude-olive)', letterSpacing: '0.02em' }}
+            >
+              {label}
+            </div>
+          </div>
+        </div>
+
+        {badge && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[10px]"
+            style={{
+              color: toneColor,
+              background: 'var(--ivory)',
+              border: `1px solid ${toneColor}`,
+              letterSpacing: '0.03em',
+            }}
+          >
+            {badge.text}
+          </span>
+        )}
+      </div>
+
+      {detail && (
+        <div className="text-[11px]" style={{ color: 'var(--claude-stone)' }}>
+          {detail}
+        </div>
+      )}
+
+      {progress && (
+        <div
+          className="w-full h-1.5 rounded-full mt-2"
+          style={{ background: 'var(--sand)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.min(progress.pct, 100)}%`,
+              background: toneColor,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------- main ----------------
+
 export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
+  const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<ChartTimeRange>('7d');
   const [chartType, setChartType] = useState<ChartType>('area');
   const [selectedMetric, setSelectedMetric] = useState<'tokens' | 'cost'>('tokens');
-  const { chartDimensions, chartContainerRef } = useChartDimensions();
+  const { dim, ref } = useChartDimensions();
 
   const chartData = useChartData(stats, timeRange);
-  const modelBreakdownData = useModelBreakdownData(stats);
+  const modelBreakdown = useModelBreakdown(stats);
 
-  const totalWeekTokens = stats.thisWeek.reduce((sum, day) => sum + day.totalTokens, 0);
-  const totalWeekCost = stats.thisWeek.reduce((sum, day) => sum + day.totalCost, 0);
+  const totalWeekTokens = stats.thisWeek.reduce((sum, d) => sum + d.totalTokens, 0);
+  const totalWeekCost = stats.thisWeek.reduce((sum, d) => sum + d.totalCost, 0);
   const avgDailyTokens = totalWeekTokens / 7;
   const avgDailyCost = totalWeekCost / 7;
 
-  return (
-    <TooltipProvider>
-      <div className="space-y-4">
-        {/* Header Section */}
-        <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-xl font-bold text-gradient mb-1">Usage Analytics</h2>
-                <p className="text-sm text-neutral-400">
-                  Deep insights into your API consumption patterns
-                </p>
-              </div>
+  const burnTone: 'normal' | 'warning' | 'critical' =
+    stats.burnRate > 1000 ? 'critical' : stats.burnRate > 500 ? 'warning' : 'normal';
 
-              <div className="flex items-center gap-2">
-                <div className="glass px-3 py-1 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-neutral-300">Live Data</span>
-                  </div>
-                </div>
-              </div>
+  const usageTone: 'normal' | 'warning' | 'critical' =
+    stats.percentageUsed >= 90 ? 'critical' : stats.percentageUsed >= 70 ? 'warning' : 'normal';
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2
+                className="font-serif mb-1"
+                style={{
+                  color: 'var(--claude-black)',
+                  fontSize: '24px',
+                  lineHeight: 1.2,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {t('analytics.title')}
+              </h2>
+              <p className="text-[13px]" style={{ color: 'var(--claude-olive)' }}>
+                {t('analytics.subtitle')}
+              </p>
             </div>
 
-            <ControlTabs
-              timeRange={timeRange}
-              setTimeRange={setTimeRange}
-              chartType={chartType}
-              setChartType={setChartType}
-              selectedMetric={selectedMetric}
-              setSelectedMetric={setSelectedMetric}
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px]"
+              style={{
+                color: 'var(--claude-olive)',
+                background: 'var(--sand)',
+                letterSpacing: '0.02em',
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: 'var(--terracotta)' }}
+              />
+              {t('analytics.live')}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-5">
+            <Segmented
+              value={timeRange}
+              onChange={setTimeRange}
+              options={[
+                { value: '7d', label: t('analytics.range7d'), icon: CalendarDays },
+                { value: '30d', label: t('analytics.range30d'), icon: CalendarDays },
+              ]}
             />
-
-            <SummaryStats
-              totalWeekTokens={totalWeekTokens}
-              totalWeekCost={totalWeekCost}
-              avgDailyTokens={avgDailyTokens}
-              avgDailyCost={avgDailyCost}
+            <Segmented
+              value={chartType}
+              onChange={setChartType}
+              options={[
+                { value: 'area', label: t('analytics.chartArea'), icon: Activity },
+                { value: 'line', label: t('analytics.chartLine'), icon: LineChart },
+                { value: 'bar', label: t('analytics.chartBar'), icon: BarChart3 },
+              ]}
             />
-          </CardContent>
-        </Card>
+            <Segmented
+              value={selectedMetric}
+              onChange={setSelectedMetric}
+              options={[
+                { value: 'tokens', label: t('analytics.metricTokens'), icon: Sparkles },
+                { value: 'cost', label: t('analytics.metricCost'), icon: Coins },
+              ]}
+            />
+          </div>
 
-        <MainChart
-          chartData={chartData}
-          chartType={chartType}
-          selectedMetric={selectedMetric}
-          timeRange={timeRange}
-          chartDimensions={chartDimensions}
-          chartContainerRef={chartContainerRef}
-        />
+          <div className="grid grid-cols-4 gap-3">
+            <SummaryTile
+              label={t('analytics.totalTokens7d')}
+              value={formatNumber(totalWeekTokens)}
+            />
+            <SummaryTile
+              label={t('analytics.totalCost7d')}
+              value={formatCurrency(totalWeekCost)}
+            />
+            <SummaryTile
+              label={t('analytics.avgDailyTokens')}
+              value={formatNumber(Math.round(avgDailyTokens))}
+            />
+            <SummaryTile
+              label={t('analytics.avgDailyCost')}
+              value={formatCurrency(avgDailyCost)}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Bottom Section - Model Distribution & Performance */}
-        <div className="grid grid-cols-1 gap-4">
-          {/* Model Distribution */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-white">Model Distribution</CardTitle>
-                  <CardDescription>Today's usage by AI model</CardDescription>
-                </div>
+      <MainChart
+        chartData={chartData}
+        chartType={chartType}
+        selectedMetric={selectedMetric}
+        timeRange={timeRange}
+        dim={dim}
+        chartRef={ref}
+      />
 
-                <div className="bg-neutral-800/50 px-3 py-1 rounded-lg border border-neutral-700">
-                  <span className="text-xs text-neutral-300">
-                    {modelBreakdownData.length} models
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {modelBreakdownData.length > 0 ? (
-                <div className="flex items-center gap-8">
-                  {/* Large Donut Chart */}
-                  <div className="relative w-40 h-40 flex-shrink-0">
-                    <svg width="160" height="160" className="transform -rotate-90">
-                      <circle
-                        cx="80"
-                        cy="80"
-                        r="60"
-                        fill="none"
-                        stroke="rgba(255, 255, 255, 0.1)"
-                        strokeWidth="16"
-                      />
+      {/* Model Distribution */}
+      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle
+                className="font-serif"
+                style={{
+                  color: 'var(--claude-black)',
+                  fontSize: '18px',
+                  fontWeight: 500,
+                  letterSpacing: '-0.005em',
+                }}
+              >
+                {t('analytics.modelDistribution')}
+              </CardTitle>
+              <CardDescription style={{ color: 'var(--claude-olive)' }}>
+                {t('analytics.modelDistributionSubtitle')}
+              </CardDescription>
+            </div>
+            <span
+              className="px-2.5 py-1 rounded-md text-[11px]"
+              style={{
+                color: 'var(--claude-olive)',
+                background: 'var(--sand)',
+                letterSpacing: '0.02em',
+              }}
+            >
+              {t('analytics.modelsCount', { count: modelBreakdown.length })}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {modelBreakdown.length > 0 ? (
+            <div className="flex items-center gap-6">
+              {/* Donut */}
+              <div className="relative w-36 h-36 flex-shrink-0">
+                <svg width="144" height="144" className="transform -rotate-90">
+                  <circle cx="72" cy="72" r="56" fill="none" stroke="#e8e6dc" strokeWidth="12" />
+                  {(() => {
+                    const circumference = 2 * Math.PI * 56;
+                    let offset = 0;
+                    return modelBreakdown.map((m) => {
+                      const dash = (m.percentage / 100) * circumference;
+                      const circle = (
+                        <circle
+                          key={m.name}
+                          cx="72"
+                          cy="72"
+                          r="56"
+                          fill="none"
+                          stroke={m.color}
+                          strokeWidth="12"
+                          strokeDasharray={`${dash} ${circumference - dash}`}
+                          strokeDashoffset={-offset}
+                          strokeLinecap="butt"
+                          className="transition-all duration-500"
+                        />
+                      );
+                      offset += dash;
+                      return circle;
+                    });
+                  })()}
+                </svg>
 
-                      {modelBreakdownData.map((model, index) => {
-                        const circumference = 2 * Math.PI * 60;
-                        const strokeDasharray = circumference;
-                        const strokeDashoffset =
-                          circumference - (model.percentage / 100) * circumference;
-                        const rotation =
-                          modelBreakdownData
-                            .slice(0, index)
-                            .reduce((sum, prev) => sum + prev.percentage, 0) * 3.6;
-
-                        return (
-                          <circle
-                            key={model.name}
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke={model.color}
-                            strokeWidth="16"
-                            strokeDasharray={strokeDasharray}
-                            strokeDashoffset={strokeDashoffset}
-                            strokeLinecap="round"
-                            style={{
-                              transformOrigin: '80px 80px',
-                              transform: `rotate(${rotation}deg)`,
-                            }}
-                            className="transition-all duration-500"
-                          />
-                        );
-                      })}
-                    </svg>
-
-                    {/* Center Content */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-xl font-bold text-white">
-                          {formatNumber(stats.today.totalTokens)}
-                        </div>
-                        <div className="text-xs text-neutral-400">tokens</div>
-                      </div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div
+                      className="font-serif leading-none"
+                      style={{
+                        color: 'var(--claude-black)',
+                        fontSize: '20px',
+                        fontWeight: 500,
+                        letterSpacing: '-0.01em',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {formatNumber(stats.today.totalTokens)}
+                    </div>
+                    <div
+                      className="text-[10px] mt-1 uppercase"
+                      style={{ color: 'var(--claude-stone)', letterSpacing: '0.08em' }}
+                    >
+                      {t('analytics.tokensLabel')}
                     </div>
                   </div>
-
-                  {/* Model List */}
-                  <div className="flex-1 space-y-3">
-                    {modelBreakdownData.map((model) => (
-                      <div
-                        key={model.name}
-                        className="flex items-center justify-between p-4 bg-neutral-800/50 rounded-xl border border-neutral-700"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className="w-5 h-5 rounded-full"
-                            style={{ backgroundColor: model.color }}
-                          />
-                          <div>
-                            <div className="text-base font-bold text-white">{model.name}</div>
-                            <div className="text-sm text-neutral-400">
-                              {model.percentage.toFixed(1)}% usage
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-base font-bold text-white">
-                            {formatNumber(model.value)}
-                          </div>
-                          <div className="text-sm text-neutral-400">
-                            {formatCurrency(model.cost)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
-              ) : (
-                <div className="text-center py-12 text-neutral-400">
-                  <svg
-                    className="w-16 h-16 mx-auto mb-4 opacity-50"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              </div>
+
+              {/* Legend */}
+              <div className="flex-1 space-y-2">
+                {modelBreakdown.map((m) => (
+                  <div
+                    key={m.name}
+                    className="flex items-center justify-between px-3 py-2.5 rounded-lg"
+                    style={{
+                      background: 'var(--parchment)',
+                      border: '1px solid var(--cream)',
+                    }}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <p className="text-sm">No model usage data available</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Performance Metrics */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardHeader>
-              <CardTitle className="text-white">Performance Metrics</CardTitle>
-              <CardDescription>Key insights and efficiency indicators</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Burn Rate */}
-                <Card className="bg-neutral-800/50 border-neutral-700">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-                            />
-                          </svg>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ background: m.color }}
+                      />
+                      <div className="min-w-0">
+                        <div
+                          className="text-[13px] truncate"
+                          style={{ color: 'var(--claude-black)', fontWeight: 500 }}
+                        >
+                          {m.name}
                         </div>
-                        <div>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="text-xl font-bold text-white cursor-help">
-                                {formatNumber(stats.burnRate)}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>
-                                Rate of token consumption per hour based on your last 24 hours of
-                                usage
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <div className="text-sm text-neutral-400">Burn Rate</div>
+                        <div className="text-[11px]" style={{ color: 'var(--claude-stone)' }}>
+                          {m.percentage.toFixed(1)}%
                         </div>
                       </div>
-
+                    </div>
+                    <div className="text-right ml-3">
                       <div
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          stats.burnRate > 1000
-                            ? 'bg-red-500/20 text-red-300'
-                            : stats.burnRate > 500
-                              ? 'bg-yellow-500/20 text-yellow-300'
-                              : 'bg-green-500/20 text-green-300'
-                        }`}
+                        className="text-[13px]"
+                        style={{
+                          color: 'var(--claude-black)',
+                          fontWeight: 500,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
                       >
-                        {stats.burnRate > 1000
-                          ? 'High'
-                          : stats.burnRate > 500
-                            ? 'Moderate'
-                            : 'Normal'}
+                        {formatNumber(m.value)}
+                      </div>
+                      <div className="text-[11px]" style={{ color: 'var(--claude-stone)' }}>
+                        {formatCurrency(m.cost)}
                       </div>
                     </div>
-
-                    <div className="text-xs text-neutral-400 mb-2">tokens per hour</div>
-                    <div className="w-full bg-neutral-800 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-1000 ${
-                          stats.burnRate > 1000
-                            ? 'bg-red-500'
-                            : stats.burnRate > 500
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                        }`}
-                        style={{ width: `${Math.min((stats.burnRate / 2000) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Efficiency */}
-                <Card className="bg-neutral-800/50 border-neutral-700">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="text-xl font-bold text-white cursor-help">
-                                {stats.percentageUsed.toFixed(1)}%
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Percentage of your daily token limit currently used</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <div className="text-sm text-neutral-400">Efficiency</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-neutral-400 mb-2">plan utilization</div>
-                    <div className="w-full bg-neutral-800 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-1000"
-                        style={{ width: `${Math.min(stats.percentageUsed, 100)}%` }}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Depletion */}
-                <Card className="bg-neutral-800/50 border-neutral-700">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="text-xl font-bold text-white cursor-help">
-                                {getDepletionText(stats)}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>
-                                Estimated time until your daily token limit is reached at current
-                                usage rate
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <div className="text-sm text-neutral-400">Depletion</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-neutral-400">at current burn rate</div>
-                  </CardContent>
-                </Card>
-
-                {/* Average Cost */}
-                <Card className="bg-neutral-800/50 border-neutral-700">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
-                          <svg
-                            className="w-6 h-6 text-white"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="text-xl font-bold text-white">
-                            {stats.today.totalTokens > 0 && stats.today.totalCost > 0
-                              ? formatCurrency(
-                                  (stats.today.totalCost / stats.today.totalTokens) * 1000
-                                )
-                              : '$0.000'}
-                          </div>
-                          <div className="text-sm text-neutral-400">Avg Cost</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-neutral-400">per 1,000 tokens</div>
-                  </CardContent>
-                </Card>
+                  </div>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </TooltipProvider>
+            </div>
+          ) : (
+            <div className="text-center py-12" style={{ color: 'var(--claude-stone)' }}>
+              <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-40" strokeWidth={1.25} />
+              <p className="text-[13px]">{t('analytics.noData')}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Performance */}
+      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+        <CardHeader>
+          <CardTitle
+            className="font-serif"
+            style={{
+              color: 'var(--claude-black)',
+              fontSize: '18px',
+              fontWeight: 500,
+              letterSpacing: '-0.005em',
+            }}
+          >
+            {t('analytics.performance')}
+          </CardTitle>
+          <CardDescription style={{ color: 'var(--claude-olive)' }}>
+            {t('analytics.performanceSubtitle')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3">
+            <MetricCard
+              icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
+              value={formatNumber(stats.burnRate)}
+              label={t('analytics.burnRateLabel')}
+              detail={t('analytics.burnRateDetail', {
+                pct: Math.min((stats.burnRate / 2000) * 100, 100).toFixed(0),
+              })}
+              badge={{
+                text:
+                  burnTone === 'critical'
+                    ? t('analytics.toneHigh')
+                    : burnTone === 'warning'
+                      ? t('analytics.toneModerate')
+                      : t('analytics.toneNormal'),
+                tone: burnTone,
+              }}
+              progress={{ pct: Math.min((stats.burnRate / 2000) * 100, 100), tone: burnTone }}
+            />
+            <MetricCard
+              icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}
+              value={`${stats.percentageUsed.toFixed(1)}%`}
+              label={t('analytics.planUtilization')}
+              detail={t('analytics.planUtilizationDetail')}
+              progress={{ pct: stats.percentageUsed, tone: usageTone }}
+            />
+            <MetricCard
+              icon={<Clock className="w-4 h-4" strokeWidth={1.75} />}
+              value={getDepletionText(stats, t)}
+              label={t('analytics.depletion')}
+              detail={t('analytics.depletionDetail')}
+            />
+            <MetricCard
+              icon={<Coins className="w-4 h-4" strokeWidth={1.75} />}
+              value={
+                stats.today.totalTokens > 0 && stats.today.totalCost > 0
+                  ? formatCurrency((stats.today.totalCost / stats.today.totalTokens) * 1000)
+                  : '$0.000'
+              }
+              label={t('analytics.avgCost')}
+              detail={t('analytics.avgCostDetail')}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 };

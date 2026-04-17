@@ -1,69 +1,75 @@
 import type React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LoadingScreenProps {
   message?: string;
 }
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
-  const currentMessage = message || 'Initializing usage tracking...';
+  const { t } = useTranslation();
+  const currentMessage = message || t('loading.message');
 
   return (
-    <div className="h-screen w-full gradient-bg flex items-center justify-center">
-      <div className="glass-card p-8 text-center max-w-sm w-full glass-interactive">
-        {/* Animated Logo */}
-        <div className="mb-8 flex justify-center">
-          <div className="relative">
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center floating"
-              style={{ background: 'var(--gradient-primary)' }}
-            >
-              <span className="text-white text-2xl font-bold">CC</span>
-            </div>
-
-            {/* Orbital rings */}
-            <div
-              className="absolute inset-0 rounded-full border-2 animate-spin"
-              style={{
-                borderColor: 'var(--color-primary-light)',
-                animationDuration: '3s',
-                animationTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            />
-            <div
-              className="absolute inset-2 rounded-full border animate-spin"
-              style={{
-                borderColor: 'var(--color-neutral-400)',
-                animationDuration: '2s',
-                animationDirection: 'reverse',
-                animationTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            />
+    <div
+      className="h-screen w-full flex items-center justify-center px-8"
+      style={{
+        background: 'var(--parchment)',
+        // Let users drag / snap the frameless window even while it's loading.
+        WebkitAppRegion: 'drag',
+      } as React.CSSProperties}
+    >
+      <div className="max-w-sm w-full text-center">
+        {/* Claude wordmark using the brand terracotta circle */}
+        <div className="mb-10 flex justify-center floating">
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--terracotta)' }}
+          >
+            <span className="font-serif text-[24px] leading-none text-white">T</span>
           </div>
         </div>
 
-        {/* Loading Text */}
-        <h2 className="text-white text-xl font-bold mb-3 text-shadow font-primary">CCSeva</h2>
+        <h1
+          className="font-serif mb-3"
+          style={{
+            color: 'var(--claude-black)',
+            fontSize: '36px',
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+            fontWeight: 500,
+          }}
+        >
+          TokenWatch
+        </h1>
+
         <p
-          className="text-white/80 text-sm mb-6 font-primary min-h-[2.5em] px-2"
+          className="mb-10 px-4"
+          style={{
+            color: 'var(--claude-olive)',
+            fontSize: '16px',
+            lineHeight: 1.6,
+            minHeight: '3.2em',
+          }}
           aria-live="polite"
         >
           {currentMessage}
         </p>
 
-        {/* Loading Spinner */}
         <div className="flex justify-center mb-6">
           <div className="loading-spinner" />
         </div>
 
-        {/* Progress Dots */}
-        <div className="loading-dots mt-2 justify-center">
+        <div className="loading-dots justify-center">
           <div className="loading-dot" />
           <div className="loading-dot" />
           <div className="loading-dot" />
         </div>
 
-        <p className="text-white/40 text-[10px] mt-6 font-primary">
-          First run may take a while for large usage histories
+        <p
+          className="mt-10 text-[11px]"
+          style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+        >
+          {t('loading.footer')}
         </p>
       </div>
     </div>

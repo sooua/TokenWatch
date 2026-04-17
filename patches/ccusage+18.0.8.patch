@@ -1,17 +1,17 @@
 diff --git a/node_modules/ccusage/dist/data-loader-D0RyE7VE.js b/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
-index af630f6..a505fb5 100644
+index af630f6..8a07b39 100644
 --- a/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
 +++ b/node_modules/ccusage/dist/data-loader-D0RyE7VE.js
 @@ -4682,6 +4682,31 @@ var LiteLLMPricingFetcher = class {
  		}));
  	}
  	async ensurePricingLoaded() {
-+		// [ccseva-patch] Disk-cached pricing: skip the LiteLLM network fetch
++		// [tokenwatch-patch] Disk-cached pricing: skip the LiteLLM network fetch
 +		// (typically 1-5s) on every cold start when a recent copy is available
-+		// at ~/.ccseva/pricing-cache.json. 24h TTL keeps the data fresh.
++		// at ~/.tokenwatch/pricing-cache.json. 24h TTL keeps the data fresh.
 +		if (this.cachedPricing == null && !this.offline) {
 +			try {
-+				const __ccsevaCachePath = path.join(homedir(), ".ccseva", "pricing-cache.json");
++				const __ccsevaCachePath = path.join(homedir(), ".tokenwatch", "pricing-cache.json");
 +				if (nativeFs.existsSync(__ccsevaCachePath)) {
 +					const __ccsevaRaw = nativeFs.readFileSync(__ccsevaCachePath, "utf8");
 +					const __ccsevaParsed = JSON.parse(__ccsevaRaw);
@@ -38,10 +38,10 @@ index af630f6..a505fb5 100644
  			}), inspect((pricing) => {
  				this.cachedPricing = pricing;
  				this.logger.info(`Loaded pricing for ${pricing.size} models`);
-+				// [ccseva-patch] Persist to disk cache so the next cold start
++				// [tokenwatch-patch] Persist to disk cache so the next cold start
 +				// can skip the network round-trip entirely.
 +				try {
-+					const __ccsevaDir = path.join(homedir(), ".ccseva");
++					const __ccsevaDir = path.join(homedir(), ".tokenwatch");
 +					if (!nativeFs.existsSync(__ccsevaDir)) nativeFs.mkdirSync(__ccsevaDir, { recursive: true });
 +					const __ccsevaCachePath = path.join(__ccsevaDir, "pricing-cache.json");
 +					const __ccsevaEntries = [];
@@ -58,7 +58,7 @@ index af630f6..a505fb5 100644
  		}
  		if (allFiles.length === 0) return [];
 -		const sortedFiles = await sortFilesByTimestamp(filterByProject(allFiles, (filePath) => extractProjectFromPath(filePath), options?.project));
-+		// [ccseva-patch] Skip the pre-read file sort. `sortFilesByTimestamp`
++		// [tokenwatch-patch] Skip the pre-read file sort. `sortFilesByTimestamp`
 +		// opens and streams every JSONL file just to find its earliest timestamp,
 +		// doubling cold-start I/O. `identifySessionBlocks` already sorts entries
 +		// by timestamp internally (see its call to `entries.sort(...)`), so the
@@ -69,7 +69,7 @@ index af630f6..a505fb5 100644
  		const processedHashes = /* @__PURE__ */ new Set();
  		const allEntries = [];
 -		for (const file of sortedFiles) await processJSONLFileByLine(file, async (line) => {
-+		// [ccseva-patch] Parallelize file I/O with a bounded concurrency cap.
++		// [tokenwatch-patch] Parallelize file I/O with a bounded concurrency cap.
 +		// The upstream serial `for (...) await processJSONLFileByLine(file, ...)`
 +		// spends ~99% of its time waiting on disk reads on cold start. JS is
 +		// single-threaded so the shared `processedHashes` Set and `allEntries`

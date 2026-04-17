@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+export type MiniHudContent = 'percentage' | 'percentageCost' | 'percentageCostBurn';
+
 export interface AppSettings {
   timezone: string;
   resetHour: number;
@@ -11,6 +13,13 @@ export interface AppSettings {
   menuBarCostSource: 'today' | 'sessionWindow';
   launchOnStartup: boolean;
   standaloneWindow: boolean;
+  language: 'auto' | 'en' | 'zh';
+  miniHud: boolean;
+  miniHudContent: MiniHudContent;
+  // Remembered position after the user drags the HUD. Undefined until first
+  // move — main process anchors top-right on first show.
+  miniHudX?: number;
+  miniHudY?: number;
 }
 
 export class SettingsService {
@@ -20,7 +29,7 @@ export class SettingsService {
 
   constructor() {
     // Create settings directory in user's home directory
-    const settingsDir = path.join(os.homedir(), '.ccseva');
+    const settingsDir = path.join(os.homedir(), '.tokenwatch');
     this.settingsPath = path.join(settingsDir, 'settings.json');
 
     // Auto-detect timezone as default
@@ -35,6 +44,9 @@ export class SettingsService {
       menuBarCostSource: 'today',
       launchOnStartup: false,
       standaloneWindow: false,
+      language: 'auto',
+      miniHud: false,
+      miniHudContent: 'percentageCost',
     };
 
     // Ensure settings directory exists

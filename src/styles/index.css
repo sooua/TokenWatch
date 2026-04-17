@@ -2,140 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Fira Code Font */
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
+/*
+ * Claude / Anthropic design system — warm parchment + serif.
+ * We keep the legacy class names used by components (.glass-card, .btn,
+ * .app-background, etc.) but reimplement their visuals to match the Claude
+ * aesthetic so the refactor doesn't require touching every component.
+ */
 
-/* Custom Properties for Claude Code Design System */
 :root {
-  /* Claude Code Color Swatches */
-  --swatch--slate-dark: #1c1917;
-  --swatch--slate-medium: #44403c;
-  --swatch--slate-light: #78716c;
-  --swatch--cloud-light: #fafaf9;
-  --swatch--cloud-medium: #f5f5f4;
-  --swatch--cloud-dark: #e7e5e4;
+  /* Warm Claude palette — every neutral has a yellow-brown undertone */
+  --parchment: #f5f4ed;
+  --ivory: #faf9f5;
+  --sand: #e8e6dc;
+  --cream: #f0eee6;
 
-  /* Warm Neutral Palette */
-  --color-neutral-50: #fafaf9;
-  --color-neutral-100: #f5f5f4;
-  --color-neutral-200: #e7e5e4;
-  --color-neutral-300: #d6d3d1;
-  --color-neutral-400: #a8a29e;
-  --color-neutral-500: #78716c;
-  --color-neutral-600: #57534e;
-  --color-neutral-700: #44403c;
-  --color-neutral-800: #292524;
-  --color-neutral-900: #1c1917;
+  --terracotta: #c96442;
+  --terracotta-light: #d97757;
+  --terracotta-dark: #b0533a;
 
-  /* Claude Code Accent Colors */
-  --color-primary: rgba(204, 120, 92, 1);
-  --color-primary-light: rgba(204, 120, 92, 0.8);
-  --color-primary-dark: rgba(184, 100, 72, 1);
-  --color-accent: #ff6b35;
-  --color-accent-light: #ff8c5c;
+  --claude-black: #141413;
+  --claude-dark: #30302e;
+  --claude-charcoal: #3d3d3a;
+  --claude-warm: #4d4c48;
+  --claude-olive: #5e5d59;
+  --claude-stone: #87867f;
+  --claude-silver: #b0aea5;
 
-  /* Status Colors with Warm Undertones */
-  --color-success: #15803d;
-  --color-success-light: #22c55e;
-  --color-warning: #ea580c;
-  --color-warning-light: #fb7c2d;
-  --color-error: #dc2626;
-  --color-error-light: #ef4444;
+  --ring-warm: #d1cfc5;
+  --ring-deep: #c2c0b6;
 
-  /* Claude Code Gradients */
-  --gradient-primary: linear-gradient(135deg, rgba(204, 120, 92, 1) 0%, rgba(184, 100, 72, 1) 100%);
-  --gradient-secondary: linear-gradient(135deg, #ff6b35 0%, #ea580c 100%);
-  --gradient-success: linear-gradient(135deg, #15803d 0%, #166534 100%);
-  --gradient-warning: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
-  --gradient-error: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  --gradient-glass: linear-gradient(135deg, rgba(250, 250, 249, 0.08) 0%, rgba(250, 250, 249, 0.04) 100%);
-  --gradient-backdrop: linear-gradient(135deg, #1c1917 0%, #292524 50%, #1c1917 100%);
+  --focus-blue: #3898ec;
+  --error-crimson: #b53333;
 
-  /* Subtle Shadows for Clean Aesthetic */
-  --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.04);
-  --shadow-sm: 0 1px 3px rgba(28, 25, 23, 0.08), 0 1px 2px rgba(28, 25, 23, 0.06);
-  --shadow-md: 0 4px 6px rgba(28, 25, 23, 0.06), 0 2px 4px rgba(28, 25, 23, 0.04);
-  --shadow-lg: 0 10px 15px rgba(28, 25, 23, 0.08), 0 4px 6px rgba(28, 25, 23, 0.04);
-  --shadow-xl: 0 20px 25px rgba(28, 25, 23, 0.08), 0 10px 10px rgba(28, 25, 23, 0.03);
-  --shadow-2xl: 0 25px 50px rgba(28, 25, 23, 0.15);
-  --shadow-glass: 0 8px 32px rgba(68, 64, 60, 0.15);
-  --shadow-glow: 0 0 20px rgba(204, 120, 92, 0.2);
+  /* Semantic aliases */
+  --color-bg: var(--parchment);
+  --color-surface: var(--ivory);
+  --color-surface-muted: var(--sand);
+  --color-border: var(--cream);
+  --color-border-strong: var(--sand);
+  --color-text: var(--claude-black);
+  --color-text-secondary: var(--claude-olive);
+  --color-text-tertiary: var(--claude-stone);
+  --color-primary: var(--terracotta);
+  --color-primary-light: var(--terracotta-light);
+  --color-success: #4a6b3a;
+  --color-success-light: #7a9b5f;
+  --color-warning: var(--terracotta);
+  --color-warning-light: var(--terracotta-light);
+  --color-error: var(--error-crimson);
+  --color-error-light: #c94d4d;
 
-  /* Border Radius */
+  /* Typography */
+  --font-serif: 'Anthropic Serif', 'Tiempos', 'Georgia', 'Cambria', serif;
+  --font-sans: 'Anthropic Sans', 'Inter', system-ui, -apple-system, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Anthropic Mono', 'JetBrains Mono', 'Fira Code', 'SFMono-Regular',
+    Consolas, monospace;
+  --font-family-primary: var(--font-sans);
+
+  /* Weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Shadows — ring-first, drop-shadows are whisper-soft */
+  --shadow-ring: 0 0 0 1px var(--ring-warm);
+  --shadow-ring-deep: 0 0 0 1px var(--ring-deep);
+  --shadow-whisper: 0 4px 24px rgba(20, 20, 19, 0.05);
+  --shadow-whisper-md: 0 8px 32px rgba(20, 20, 19, 0.06);
+  --shadow-glow: 0 0 0 3px rgba(201, 100, 66, 0.15);
+
+  /* Radii */
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --radius-2xl: 20px;
-  --radius-3xl: 24px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
   --radius-full: 9999px;
 
   /* Transitions */
   --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-
-  /* Spacing */
-  --spacing-unit: 4px;
-
-  /* Fira Code Typography System */
-  --font-family-primary: 'Fira Code', ui-monospace, SFMono-Regular, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  --font-family-mono: 'Fira Code', ui-monospace, SFMono-Regular, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  --font-weight-light: 300;
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  
-  /* Responsive Typography */
-  --font-size-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
-  --font-size-sm: clamp(0.875rem, 0.825rem + 0.25vw, 1rem);
-  --font-size-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
-  --font-size-lg: clamp(1.125rem, 1.075rem + 0.25vw, 1.25rem);
-  --font-size-xl: clamp(1.25rem, 1.15rem + 0.5vw, 1.5rem);
-  --font-size-2xl: clamp(1.5rem, 1.35rem + 0.75vw, 1.875rem);
-
-  /* Refined Glass Morphism */
-  --glass-backdrop: rgba(250, 250, 249, 0.06);
-  --glass-border: rgba(250, 250, 249, 0.08);
-  --glass-shadow: 0 8px 32px rgba(68, 64, 60, 0.15);
-  --glass-blur: blur(12px);
-  
-  /* Fluid Spacing */
-  --spacing-fluid-xs: clamp(0.25rem, 0.2rem + 0.25vw, 0.5rem);
-  --spacing-fluid-sm: clamp(0.5rem, 0.4rem + 0.5vw, 1rem);
-  --spacing-fluid-md: clamp(1rem, 0.8rem + 1vw, 2rem);
-  --spacing-fluid-lg: clamp(1.5rem, 1.2rem + 1.5vw, 3rem);
-  --spacing-fluid-xl: clamp(2rem, 1.6rem + 2vw, 4rem);
+  --transition-normal: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Base Styles */
 * {
   box-sizing: border-box;
 }
 
 html {
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.5;
   height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: var(--font-family-primary);
+  font-family: var(--font-sans);
   font-weight: var(--font-weight-normal);
-  font-size: var(--font-size-base);
-  line-height: 1.6;
-  color: var(--color-neutral-100);
-  background: var(--gradient-backdrop);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--parchment);
   height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -144,129 +116,97 @@ body {
 #root {
   height: 100%;
   width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* Refined Scrollbar */
+/* Serif for the editorial headlines — applied explicitly where needed. */
+.font-serif,
+h1.font-serif,
+h2.font-serif,
+h3.font-serif {
+  font-family: var(--font-serif);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.005em;
+}
+
+/* Scrollbars — thin and warm */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: rgba(250, 250, 249, 0.03);
-  border-radius: var(--radius-full);
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--gradient-primary);
+  background: var(--ring-warm);
   border-radius: var(--radius-full);
-  transition: var(--transition-fast);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary-light);
-  box-shadow: var(--shadow-glow);
+  background: var(--claude-stone);
 }
 
-/* Animated Background */
-.app-background {
+/* ------------------------------------------------------------------
+ * Page background (legacy class names preserved)
+ * ------------------------------------------------------------------ */
+.app-background,
+.gradient-bg {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--gradient-backdrop);
+  inset: 0;
+  background: var(--parchment);
   z-index: -2;
 }
 
-.app-background::before {
+/* A subtle warm wash so the parchment feels alive, not flat. No animation —
+ * the Claude design is intentionally quiet. */
+.app-background::before,
+.gradient-bg::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   background:
-    radial-gradient(circle at 20% 80%, rgba(204, 120, 92, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 107, 53, 0.06) 0%, transparent 50%),
-    radial-gradient(circle at 40% 40%, rgba(120, 113, 108, 0.04) 0%, transparent 50%);
-  animation: backgroundShift 20s ease-in-out infinite;
+    radial-gradient(
+      ellipse 80% 60% at 20% 10%,
+      rgba(201, 100, 66, 0.035) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 80% 90%,
+      rgba(94, 93, 89, 0.04) 0%,
+      transparent 60%
+    );
+  pointer-events: none;
 }
 
-/* Gradient background utility */
 .gradient-bg {
-  background: var(--gradient-backdrop);
   position: relative;
   min-height: 100vh;
 }
 
-.gradient-bg::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(circle at 20% 80%, rgba(204, 120, 92, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 107, 53, 0.06) 0%, transparent 50%),
-    radial-gradient(circle at 40% 40%, rgba(120, 113, 108, 0.04) 0%, transparent 50%);
-  animation: backgroundShift 20s ease-in-out infinite;
-  z-index: -1;
-}
-
-@keyframes backgroundShift {
-
-  0%,
-  100% {
-    transform: translateX(0) translateY(0) rotate(0deg);
-    opacity: 0.8;
-  }
-
-  33% {
-    transform: translateX(20px) translateY(-20px) rotate(2deg);
-    opacity: 1;
-  }
-
-  66% {
-    transform: translateX(-20px) translateY(20px) rotate(-2deg);
-    opacity: 0.9;
-  }
-}
-
-/* Glass Morphism Components */
+/* ------------------------------------------------------------------
+ * Cards — ivory surfaces on parchment with warm borders and ring shadows
+ * ------------------------------------------------------------------ */
 .glass {
-  background: var(--glass-backdrop);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
+  background: var(--ivory);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--cream);
   border-radius: var(--radius-xl);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--shadow-whisper);
   position: relative;
   overflow: hidden;
 }
 
-.glass::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(250, 250, 249, 0.2), transparent);
-  animation: shimmer 3s infinite;
-}
-
 .glass-card {
-  @apply glass;
+  background: var(--ivory);
+  border: 1px solid var(--cream);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-whisper);
   transition: var(--transition-normal);
 }
 
 .glass-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-xl), var(--shadow-glow);
+  border-color: var(--sand);
+  box-shadow: var(--shadow-whisper-md);
 }
 
 .glass-interactive {
@@ -274,402 +214,313 @@ body {
 }
 
 .glass-interactive:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(1px);
 }
 
-/* Claude Code Button Styles */
+/* ------------------------------------------------------------------
+ * Buttons — warm sand / terracotta / ghost
+ * ------------------------------------------------------------------ */
 .btn {
-  @apply inline-flex items-center justify-center;
-  @apply px-4 py-2 rounded-lg font-medium;
-  @apply transition-all duration-200 ease-in-out;
-  @apply border border-transparent;
-  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
-  @apply relative overflow-hidden;
-
-  font-family: var(--font-family-primary);
-  font-size: var(--font-size-sm);
-  background: rgba(250, 250, 249, 0.06);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(250, 250, 249, 0.1);
-  color: var(--color-neutral-100);
-  text-shadow: 0 1px 2px rgba(28, 25, 23, 0.4);
-
-  transition: var(--transition-normal);
-}
-
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(250, 250, 249, 0.1), transparent);
-  transition: var(--transition-normal);
-}
-
-.btn:hover::before {
-  left: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  color: var(--claude-warm);
+  background: var(--sand);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px var(--ring-warm);
+  cursor: pointer;
+  transition: var(--transition-fast);
 }
 
 .btn:hover {
-  transform: translateY(-1px) scale(1.02);
-  box-shadow: var(--shadow-lg);
-  border-color: rgba(250, 250, 249, 0.15);
-  background: rgba(250, 250, 249, 0.08);
+  background: var(--cream);
+  box-shadow: 0 0 0 1px var(--ring-deep);
 }
 
 .btn:active {
-  transform: translateY(0) scale(0.98);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 19, 0.12);
 }
 
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-blue);
+}
+
+/* Primary — terracotta CTA */
 .btn-primary {
-  background: var(--gradient-primary);
-  border-color: var(--color-primary-light);
-  box-shadow: var(--shadow-md);
+  color: var(--ivory);
+  background: var(--terracotta);
+  box-shadow: 0 0 0 1px var(--terracotta);
 }
-
 .btn-primary:hover {
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  background: var(--terracotta-dark);
+  box-shadow: 0 0 0 1px var(--terracotta-dark);
 }
 
+/* Ghost — text-like button on warm surfaces */
 .btn-ghost {
   background: transparent;
-  border-color: rgba(250, 250, 249, 0.08);
+  box-shadow: none;
+  color: var(--claude-olive);
 }
-
 .btn-ghost:hover {
-  background: rgba(250, 250, 249, 0.06);
-  border-color: rgba(250, 250, 249, 0.12);
+  background: var(--cream);
+  box-shadow: none;
+  color: var(--claude-black);
 }
 
-/* Claude Code Progress Bar */
-.progress-container {
-  @apply w-full bg-neutral-warm-800/40 rounded-full overflow-hidden;
-  position: relative;
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(250, 250, 249, 0.08);
+/* ------------------------------------------------------------------
+ * Text accents
+ * ------------------------------------------------------------------ */
+.text-gradient {
+  color: var(--claude-black);
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: initial;
+  font-family: var(--font-serif);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.01em;
 }
 
-.progress-bar {
-  @apply h-full rounded-full transition-all duration-1000 ease-out;
-  position: relative;
-  background: var(--gradient-primary);
-  box-shadow: 0 0 20px rgba(204, 120, 92, 0.3);
+.text-terracotta {
+  color: var(--terracotta);
 }
 
-.progress-bar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(250, 250, 249, 0.2), transparent);
-  animation: progressShine 2s infinite;
-}
-
-@keyframes progressShine {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  50% {
-    transform: translateX(100%);
-  }
-
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-
-/* Loading Animations */
+/* ------------------------------------------------------------------
+ * Loading states
+ * ------------------------------------------------------------------ */
 .loading-spinner {
-  @apply w-8 h-8 border-4 border-white/20 border-t-white rounded-full;
-  animation: spin 1s linear infinite;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--sand);
+  border-top-color: var(--terracotta);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
   to {
     transform: rotate(360deg);
   }
 }
 
-/* Loading Dots */
 .loading-dots {
-  @apply flex space-x-1;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .loading-dot {
-  @apply w-2 h-2 bg-white/60 rounded-full;
-  animation: bounce 1.4s infinite ease-in-out both;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--claude-stone);
+  animation: dot-pulse 1.2s ease-in-out infinite;
 }
-
-.loading-dot:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
 .loading-dot:nth-child(2) {
-  animation-delay: -0.16s;
+  animation-delay: 0.15s;
 }
-
 .loading-dot:nth-child(3) {
-  animation-delay: 0s;
-}
-
-@keyframes bounce {
-
-  0%,
-  80%,
-  100% {
-    transform: scale(0);
-  }
-
-  40% {
-    transform: scale(1);
-  }
-}
-
-/* Utility Classes */
-.hover-lift {
-  transition: var(--transition-normal);
-}
-
-.hover-lift:hover {
-  transform: translateY(-2px);
-}
-
-.hover-scale {
-  transition: var(--transition-normal);
-}
-
-.hover-scale:hover {
-  transform: scale(1.05);
-}
-
-.hover-glow {
-  transition: var(--transition-normal);
-}
-
-.hover-glow:hover {
-  box-shadow: var(--shadow-glow);
-}
-
-.text-gradient {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.text-shadow {
-  text-shadow: 0 2px 4px rgba(28, 25, 23, 0.4);
-}
-
-.floating {
-  animation: float 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-
-.stagger-children>* {
-  opacity: 0;
-  animation: staggerIn 0.6s ease-out forwards;
-}
-
-.stagger-children>*:nth-child(1) {
-  animation-delay: 0.1s;
-}
-
-.stagger-children>*:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.stagger-children>*:nth-child(3) {
   animation-delay: 0.3s;
 }
 
-.stagger-children>*:nth-child(4) {
-  animation-delay: 0.4s;
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+    background: var(--terracotta);
+  }
 }
 
-.stagger-children>*:nth-child(5) {
-  animation-delay: 0.5s;
+/* ------------------------------------------------------------------
+ * Effects: floating (hero), stagger-children (fade cascade)
+ * ------------------------------------------------------------------ */
+.floating {
+  animation: floatSoft 6s ease-in-out infinite;
 }
 
-.stagger-children>*:nth-child(6) {
-  animation-delay: 0.6s;
+@keyframes floatSoft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
-@keyframes staggerIn {
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+.stagger-children > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.stagger-children > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.stagger-children > *:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.stagger-children > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.stagger-children > *:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.stagger-children > *:nth-child(6) {
+  animation-delay: 0.3s;
+}
+
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(4px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(100%);
-  }
+/* ------------------------------------------------------------------
+ * Text shadow helper (legacy) — disabled in light theme.
+ * ------------------------------------------------------------------ */
+.text-shadow {
+  text-shadow: none;
 }
 
-/* Claude Code Notifications */
-.notification {
-  @apply glass-card;
-  padding: var(--spacing-fluid-sm);
-  margin-bottom: var(--spacing-fluid-xs);
-  border-left: 3px solid var(--color-primary);
-  font-family: var(--font-family-primary);
-  font-size: var(--font-size-sm);
-  transform: translateX(100%);
-  transition: var(--transition-normal);
+/* ------------------------------------------------------------------
+ * Overrides for legacy dark-theme Tailwind classes used across
+ * components. We avoid mass component edits by translating these to
+ * their Claude counterparts.
+ * ------------------------------------------------------------------ */
+.bg-neutral-900\/80,
+.bg-neutral-800,
+.bg-neutral-900 {
+  background-color: var(--ivory) !important;
+}
+.border-neutral-800,
+.border-neutral-700 {
+  border-color: var(--cream) !important;
 }
 
-.notification.show {
-  transform: translateX(0);
+/* Text-white family → Claude near-black (we're on a light canvas now). */
+.text-white,
+.text-white\/90,
+.text-white\/80 {
+  color: var(--claude-black) !important;
+}
+.text-white\/70,
+.text-white\/60 {
+  color: var(--claude-olive) !important;
+}
+.text-white\/50,
+.text-white\/40 {
+  color: var(--claude-stone) !important;
 }
 
-.notification.success {
-  border-left-color: var(--color-success);
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(21, 128, 61, 0.15);
+/* Dark-theme surface pills used for small metric chips: keep them light. */
+.bg-white\/5,
+.bg-white\/10 {
+  background-color: var(--sand) !important;
+}
+.bg-white\/20 {
+  background-color: var(--cream) !important;
 }
 
-.notification.warning {
-  border-left-color: var(--color-warning);
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(234, 88, 12, 0.15);
+.border-white\/10,
+.border-white\/20 {
+  border-color: var(--cream) !important;
 }
 
-.notification.error {
-  border-left-color: var(--color-error);
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(220, 38, 38, 0.15);
+/* Red / yellow / blue semantic backgrounds used in existing components —
+ * retint toward the warm palette so they don't clash. */
+.bg-red-500\/10 {
+  background-color: rgba(181, 51, 51, 0.08) !important;
+}
+.border-red-500\/20 {
+  border-color: rgba(181, 51, 51, 0.25) !important;
+}
+.text-red-300,
+.text-red-400 {
+  color: var(--error-crimson) !important;
 }
 
-.notification.info {
-  border-left-color: var(--color-primary);
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(204, 120, 92, 0.15);
+.bg-blue-500\/10 {
+  background-color: rgba(201, 100, 66, 0.08) !important;
+}
+.border-blue-500\/20 {
+  border-color: rgba(201, 100, 66, 0.25) !important;
+}
+.text-blue-200,
+.text-blue-300 {
+  color: var(--terracotta-dark) !important;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .glass-card {
-    margin: 0.5rem;
-  }
-
-  .btn {
-    @apply px-3 py-2 text-sm;
-  }
+.bg-yellow-500\/10 {
+  background-color: rgba(201, 100, 66, 0.06) !important;
+}
+.border-yellow-500\/20 {
+  border-color: rgba(201, 100, 66, 0.2) !important;
+}
+.text-yellow-300 {
+  color: var(--terracotta-dark) !important;
 }
 
-
-::selection {
-  background: rgba(204, 120, 92, 0.25);
-  color: var(--color-neutral-100);
+.bg-green-500\/10 {
+  background-color: rgba(74, 107, 58, 0.08) !important;
+}
+.border-green-500\/20 {
+  border-color: rgba(74, 107, 58, 0.25) !important;
+}
+.text-green-300,
+.text-green-400 {
+  color: #4a6b3a !important;
 }
 
-::-moz-selection {
-  background: rgba(204, 120, 92, 0.25);
-  color: var(--color-neutral-100);
+/* Glass utilities that show elsewhere */
+.bg-white\/5.border {
+  box-shadow: 0 0 0 1px var(--cream);
 }
 
-/* Claude Code Navigation */
-.nav-item {
-  @apply rounded-lg transition-all duration-200;
-  font-family: var(--font-family-primary);
-  font-size: var(--font-size-sm);
-  background: transparent;
-  border: 1px solid transparent;
+/* Utility: hide default focus ring, add Claude-style focus ring */
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-blue);
+  border-radius: var(--radius-sm);
 }
 
-.nav-item:hover {
-  background: rgba(250, 250, 249, 0.06);
-  border-color: rgba(250, 250, 249, 0.1);
-  transform: translateX(1px) scale(1.02);
+/* Quiet backdrop-blur usage from legacy glass — flatten on light canvas */
+.backdrop-blur-sm,
+.backdrop-blur {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-.nav-item.active {
-  background: var(--gradient-primary);
-  border-color: var(--color-primary-light);
-  box-shadow: var(--shadow-md), 0 0 20px rgba(204, 120, 92, 0.2);
+/* Mini HUD window: fully transparent body / html so the rounded HUD floats
+ * on the desktop rather than sitting on a parchment rectangle. The HUD
+ * component sets `.mini-hud-mode` on <body> when it mounts. */
+body.mini-hud-mode,
+body.mini-hud-mode #root {
+  background: transparent !important;
 }
-
-.nav-item.active:hover {
-  transform: translateX(0) scale(1.02);
+body.mini-hud-mode .app-background::before,
+body.mini-hud-mode .gradient-bg::before {
+  display: none !important;
 }
-
-
-/* Enhanced Progress Ring */
-.progress-ring-circle {
-  transition: stroke-dasharray 1s ease-in-out;
-}
-
-/* Z-Index Layer Utilities */
-.z-base {
-  z-index: 1;
-}
-
-.z-dropdown {
-  z-index: 999;
-}
-
-.z-overlay {
-  z-index: 998;
-}
-
-.z-modal {
-  z-index: 1000;
-}
-
-.z-tooltip {
-  z-index: 9999;
-}
-
-/* Enhanced Overlay Styles */
-.overlay-backdrop {
-  background: rgba(28, 25, 23, 0.8);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-.dropdown-content {
-  background: rgba(41, 37, 36, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(250, 250, 249, 0.1);
-  box-shadow: 0 10px 25px rgba(28, 25, 23, 0.3);
-}
-
-.tooltip-content {
-  background: rgba(41, 37, 36, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(250, 250, 249, 0.15);
-  box-shadow: 0 8px 20px rgba(28, 25, 23, 0.4);
-}
-
-

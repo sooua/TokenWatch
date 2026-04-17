@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CCSeva is a macOS menu bar Electron application that monitors Claude Code usage in real-time. The app uses the `ccusage` npm package API to fetch token usage data and displays it through a modern React-based UI with tabbed navigation, analytics, notifications, and visualizations.
+TokenWatch is a cross-platform (Windows + macOS) tray/menu-bar Electron application that monitors Claude Code usage in real-time. The app uses the `ccusage` npm package API to fetch token usage data and displays it through a warm Claude-inspired React UI with tabbed navigation, analytics, notifications, and visualizations.
+
+TokenWatch started as a Windows port of [CCSeva](https://github.com/Iamshankhadeep/ccseva) (MIT), with a full UI redesign, frameless custom title bar, i18n, worker-thread parsing, and local ccusage performance patches.
 
 ## Essential Commands
 
@@ -52,7 +54,7 @@ The app follows standard Electron patterns with clear separation:
 
 #### Service Layer (Singleton Pattern)
 - **CCUsageService**: Uses the `ccusage` npm package data-loader API to fetch usage data, implementing a 30-second cache. Now supports plan configuration and actual session-based reset times.
-- **SettingsService**: Manages user preferences persistence to `~/.ccseva/settings.json` including plan selection, custom token limits, timezone, and reset hour settings
+- **SettingsService**: Manages user preferences persistence to `~/.tokenwatch/settings.json` including plan selection, custom token limits, timezone, and reset hour settings
 - **NotificationService**: Manages macOS notifications with cooldown periods and threshold detection
 - **ResetTimeService**: Handles Claude usage reset time calculations and timezone management
 - **SessionTracker**: Tracks user sessions and activity patterns for analytics
@@ -178,7 +180,7 @@ When using the `ccusage` package data-loader API:
 
 ### Settings Management & Plan Selection (Latest)
 - **Claude Plan Settings**: Added comprehensive plan selection in SettingsPanel with Auto-detect, Pro, Max5, Max20, and Custom options
-- **Persistent Settings**: Extended SettingsService to save plan preferences to `~/.ccseva/settings.json` with backward compatibility
+- **Persistent Settings**: Extended SettingsService to save plan preferences to `~/.tokenwatch/settings.json` with backward compatibility
 - **Custom Token Limits**: Custom plan option allows users to set non-standard token limits with validation
 - **Real-time Plan Display**: TerminalView now shows selected plan settings instead of just auto-detected plans
 - **Settings UI Enhancement**: Professional plan selection dropdown with token limit display and current plan detection
@@ -202,7 +204,7 @@ When using the `ccusage` package data-loader API:
 
 ### Current Project Structure
 ```
-ccseva/
+tokenwatch/
 ├── main.ts                     # Electron main process with tray management
 ├── preload.ts                  # Secure IPC bridge
 ├── src/
@@ -262,7 +264,7 @@ Since there are no automated tests, manual verification checklist:
 8. **Data consistency**: Ensure displayed data matches `ccusage` output
 9. **Actual reset time accuracy**: Verify session-based reset times from active blocks
 10. **Session tracking**: Confirm session data persistence and analytics
-11. **Settings persistence**: Confirm plan and preference settings save to `~/.ccseva/settings.json`
+11. **Settings persistence**: Confirm plan and preference settings save to `~/.tokenwatch/settings.json`
 
 ### Plan Management & Settings
 12. **Plan selection**: Test Auto-detect, Pro, Max5, Max20, and Custom plan options in SettingsPanel

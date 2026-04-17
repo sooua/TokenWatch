@@ -1,7 +1,9 @@
-import { Camera } from 'lucide-react';
+import { Camera, Maximize2, Minimize2, Minus, RefreshCw, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import i18n, { resolveLanguage, type SupportedLanguage } from './i18n';
 import { Analytics } from './components/Analytics';
 import { Dashboard } from './components/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -14,6 +16,127 @@ import { Toaster } from './components/ui/sonner';
 import type { UsageStats } from './types/usage';
 
 type ViewType = 'dashboard' | 'live' | 'analytics' | 'terminal' | 'settings';
+
+interface IconButtonProps {
+  onClick: () => void;
+  title: string;
+  ariaLabel: string;
+  danger?: boolean;
+  children: React.ReactNode;
+}
+
+// Minimal ghost icon button in Claude editorial style. Sits flat on the
+// parchment canvas; hover shows a warm cream pad. Never a gradient or glow.
+// noDrag=true marks it as click-through-capable inside a draggable title bar.
+const IconButton: React.FC<IconButtonProps & { noDrag?: boolean }> = ({
+  onClick,
+  title,
+  ariaLabel,
+  danger,
+  children,
+  noDrag,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    aria-label={ariaLabel}
+    className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors"
+    style={{
+      color: danger ? 'var(--error-crimson)' : 'var(--claude-olive)',
+      background: 'transparent',
+      ...(noDrag ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : {}),
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = 'var(--cream)';
+      e.currentTarget.style.color = danger ? 'var(--error-crimson)' : 'var(--claude-black)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'transparent';
+      e.currentTarget.style.color = danger ? 'var(--error-crimson)' : 'var(--claude-olive)';
+    }}
+  >
+    {children}
+  </button>
+);
+
+// Custom window controls (minimize / maximize / close) drawn in renderer
+// because the BrowserWindow is frameless. We don't rely on Windows' native
+// buttons at all — they don't match the Claude palette and can't be restyled.
+const WindowControls: React.FC<{ isMaximized: boolean }> = ({ isMaximized }) => {
+  const btnBase: React.CSSProperties = {
+    width: 36,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    color: 'var(--claude-olive)',
+    background: 'transparent',
+    transition: 'all 0.15s ease',
+    WebkitAppRegion: 'no-drag',
+  } as React.CSSProperties;
+
+  return (
+    <div className="flex items-center gap-0.5 ml-1">
+      <button
+        type="button"
+        aria-label="Minimize"
+        title="Minimize"
+        style={btnBase}
+        onClick={() => window.electronAPI?.windowMinimize?.()}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--cream)';
+          e.currentTarget.style.color = 'var(--claude-black)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--claude-olive)';
+        }}
+      >
+        <Minus className="w-4 h-4" strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        aria-label={isMaximized ? 'Restore' : 'Maximize'}
+        title={isMaximized ? 'Restore' : 'Maximize'}
+        style={btnBase}
+        onClick={() => window.electronAPI?.windowToggleMaximize?.()}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--cream)';
+          e.currentTarget.style.color = 'var(--claude-black)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--claude-olive)';
+        }}
+      >
+        {isMaximized ? (
+          <Minimize2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+        ) : (
+          <Maximize2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+        )}
+      </button>
+      <button
+        type="button"
+        aria-label="Close"
+        title="Close"
+        style={btnBase}
+        onClick={() => window.electronAPI?.windowClose?.()}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--terracotta)';
+          e.currentTarget.style.color = '#faf9f5';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--claude-olive)';
+        }}
+      >
+        <X className="w-4 h-4" strokeWidth={2} />
+      </button>
+    </div>
+  );
+};
 
 interface AppState {
   currentView: ViewType;
@@ -39,10 +162,14 @@ interface AppState {
     menuBarCostSource?: 'today' | 'sessionWindow';
     launchOnStartup?: boolean;
     standaloneWindow?: boolean;
+    language?: 'auto' | 'en' | 'zh';
+    miniHud?: boolean;
+    miniHudContent?: 'percentage' | 'percentageCost' | 'percentageCostBurn';
   };
 }
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
   const [state, setState] = useState<AppState>({
     currentView: 'dashboard',
     stats: null,
@@ -60,6 +187,17 @@ const App: React.FC = () => {
     },
   });
 
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.windowIsMaximized?.().then(setIsMaximized);
+    const listener = window.electronAPI.onWindowMaximizeChanged?.((val) => setIsMaximized(val));
+    return () => {
+      if (listener) window.electronAPI.removeWindowMaximizeChangedListener?.(listener);
+    };
+  }, []);
+
   // Load settings from storage
   const loadSettings = useCallback(async () => {
     try {
@@ -68,6 +206,12 @@ const App: React.FC = () => {
       }
 
       const settings = await window.electronAPI.loadSettings();
+      // Apply language before any UI renders with t() so the first paint is
+      // already localized.
+      if (settings?.language) {
+        const next = resolveLanguage(settings.language as SupportedLanguage);
+        if (i18n.language !== next) i18n.changeLanguage(next);
+      }
       setState((prev) => ({
         ...prev,
         preferences: {
@@ -93,11 +237,11 @@ const App: React.FC = () => {
       console.error('Error saving settings:', error);
       addNotification({
         type: 'error',
-        title: 'Settings Save Failed',
-        message: 'Could not save settings to local storage',
+        title: t('toast.settingsSaveFailed'),
+        message: t('toast.settingsSaveFailedDesc'),
       });
     }
-  }, []);
+  }, [t]);
 
   // Load usage stats with enhanced error handling.
   // `showLoading` controls whether the full LoadingScreen blocks the UI while
@@ -127,8 +271,8 @@ const App: React.FC = () => {
       if (!showLoading) {
         addNotification({
           type: 'success',
-          title: 'Data Refreshed',
-          message: 'Usage statistics updated successfully',
+          title: t('toast.dataRefreshed'),
+          message: t('toast.dataRefreshedDesc'),
         });
       }
     } catch (err) {
@@ -142,11 +286,11 @@ const App: React.FC = () => {
 
       addNotification({
         type: 'error',
-        title: 'Update Failed',
+        title: t('toast.updateFailed'),
         message: errorMessage,
       });
     }
-  }, []);
+  }, [t]);
 
   // Force refresh data
   const refreshData = useCallback(async () => {
@@ -162,8 +306,8 @@ const App: React.FC = () => {
       setState((prev) => ({ ...prev, stats: data }));
       addNotification({
         type: 'success',
-        title: 'Data Refreshed',
-        message: 'Latest usage data loaded',
+        title: t('toast.dataRefreshed'),
+        message: t('toast.latestDataLoaded'),
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to refresh data';
@@ -172,11 +316,11 @@ const App: React.FC = () => {
 
       addNotification({
         type: 'error',
-        title: 'Refresh Failed',
+        title: t('toast.refreshFailed'),
         message: errorMessage,
       });
     }
-  }, []);
+  }, [t]);
 
   // Take screenshot
   const takeScreenshot = useCallback(async () => {
@@ -188,24 +332,24 @@ const App: React.FC = () => {
       const result = await window.electronAPI.takeScreenshot();
 
       if (result.success) {
-        toast.success('Screenshot captured!', {
+        toast.success(t('toast.screenshotCaptured'), {
           description: result.message,
           duration: 4000,
         });
       } else {
-        toast.error('Screenshot failed', {
+        toast.error(t('toast.screenshotFailed'), {
           description: result.error || 'Unknown error occurred',
           duration: 4000,
         });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to take screenshot';
-      toast.error('Screenshot failed', {
+      toast.error(t('toast.screenshotFailed'), {
         description: errorMessage,
         duration: 4000,
       });
     }
-  }, []);
+  }, [t]);
 
   // Add notification with auto-dismiss
   const addNotification = (
@@ -243,6 +387,13 @@ const App: React.FC = () => {
         ...prev,
         preferences: { ...prev.preferences, ...newPreferences },
       }));
+
+      // Reflect language changes into i18next immediately so the UI swaps
+      // locale without waiting for a reload.
+      if (newPreferences.language !== undefined) {
+        const next = resolveLanguage(newPreferences.language);
+        if (i18n.language !== next) i18n.changeLanguage(next);
+      }
 
       // Save settings immediately when changed
       saveSettings(newPreferences);
@@ -427,13 +578,13 @@ const App: React.FC = () => {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-4">Connection Error</h2>
+            <h2 className="text-xl font-bold text-white mb-4">{t('app.connectionError')}</h2>
             <p className="text-neutral-300 mb-6">{state.error}</p>
             <Button
               onClick={() => loadUsageStats()}
               className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 transition-all duration-200"
             >
-              Try Again
+              {t('app.tryAgain')}
             </Button>
           </div>
         </div>
@@ -459,130 +610,169 @@ const App: React.FC = () => {
 
       {state.isStale && (
         <div className="absolute top-0 inset-x-0 z-50 flex justify-center pointer-events-none">
-          <div className="mt-2 px-3 py-1 rounded-full text-[11px] font-medium text-white/80 bg-white/10 backdrop-blur-sm border border-white/10 flex items-center gap-2 shadow-lg">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            {state.loadingMessage || 'Refreshing…'}
+          <div
+            className="mt-2 px-3 py-1 rounded-full text-[11px] font-medium flex items-center gap-2"
+            style={{
+              color: 'var(--claude-olive)',
+              background: 'var(--ivory)',
+              border: '1px solid var(--cream)',
+              boxShadow: 'var(--shadow-whisper)',
+            }}
+          >
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: 'var(--terracotta)' }}
+            />
+            {state.loadingMessage || t('app.refreshing')}
           </div>
         </div>
       )}
 
-      <div className="relative flex h-screen overflow-hidden">
-        {/* Main Content - Full Width for Compact Mode */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-3 max-w-full min-h-full">
-            {/* Compact Header */}
-            <header className="mb-4">
-              <div className="flex items-center justify-between mb-3">
+      {/* Column layout: the header is its own row (never scrolls), the main
+          area is the only scroll container. This avoids sticky-positioning
+          games so the header can never drift on scroll. */}
+      <div className="relative flex flex-col h-screen overflow-hidden">
+        <header
+          className="flex-shrink-0 pl-5 pr-3 pt-5 pb-0 z-40"
+          // Whole header strip is the drag region. Interactive bits inside
+          // (action buttons, window controls, nav tabs) individually opt out
+          // via WebkitAppRegion: no-drag so clicks reach them normally.
+          style={{
+            background: 'var(--parchment)',
+            WebkitAppRegion: 'drag',
+          } as React.CSSProperties}
+        >
+              <div
+                // items-start pulls the right-side controls up to the top of
+                // the row while the logo + stacked title/tagline fill more
+                // vertical space on the left. Drag is inherited from <header>.
+                className="flex items-start justify-between mb-3"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 flex-shrink-0">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-full h-full"
+                  {/* TokenWatch brand mark: terracotta disc with serif "T" inside */}
+                  <div
+                    className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center"
+                    style={{ background: 'var(--terracotta)' }}
+                  >
+                    <span
+                      className="font-serif leading-none text-white"
+                      style={{ fontSize: '18px' }}
                     >
-                      <circle cx="12" cy="12" r="11" fill="#CC785C" />
-                      <path
-                        fillRule="evenodd"
-                        clipRule="evenodd"
-                        d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20C13.8214 20 15.4983 19.4024 16.8358 18.3914C15.8231 17.0375 15.1667 15.352 15.1667 13.5C15.1667 9.35786 11.8088 6 7.66667 6C7.25363 6 6.84888 6.04259 6.45976 6.12411C7.59756 4.81331 9.65863 4 12 4Z"
-                        fill="white"
-                      />
-                    </svg>
+                      T
+                    </span>
                   </div>
                   <div>
-                    <h1 className="text-lg font-bold text-gradient mb-1">CCSeva</h1>
-                    <p className="text-xs text-neutral-400">Track API usage</p>
+                    <h1
+                      className="font-serif leading-none"
+                      style={{
+                        color: 'var(--claude-black)',
+                        fontSize: '20px',
+                        letterSpacing: '-0.005em',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {t('app.title')}
+                    </h1>
+                    <p
+                      className="mt-1 text-[11px]"
+                      style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+                    >
+                      {t('app.tagline')}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="glass px-2 py-1 rounded-lg">
-                    <span className="text-xs text-neutral-300">
-                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+                <div
+                  // -mt-2 pulls the controls up so their top offset matches
+                  // the right-side padding (pr-3 = 12px), giving the row a
+                  // balanced gutter around the buttons.
+                  className="flex items-center gap-1.5 -mt-2"
+                  style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                >
+                  <span
+                    className="px-2.5 py-1 rounded-md text-[11px] font-medium"
+                    style={{
+                      color: 'var(--claude-olive)',
+                      background: 'var(--sand)',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
 
-                  <Button
+                  <IconButton
                     onClick={refreshData}
-                    variant="ghost"
-                    size="icon"
-                    className="p-1 hover:bg-white/10 hover:scale-105 transition-all duration-200"
-                    title="Refresh Data (⌘R)"
+                    title={t('app.refresh')}
+                    ariaLabel={t('app.refreshAria')}
+                    noDrag
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                  </Button>
+                    <RefreshCw className="w-4 h-4" strokeWidth={1.75} />
+                  </IconButton>
 
-                  <Button
+                  <IconButton
                     onClick={takeScreenshot}
-                    variant="ghost"
-                    size="icon"
-                    className="p-1 hover:bg-white/10 hover:scale-105 transition-all duration-200"
-                    title="Take Screenshot (⌘⇧S)"
+                    title={t('app.screenshot')}
+                    ariaLabel={t('app.screenshotAria')}
+                    noDrag
                   >
-                    <Camera className="w-4 h-4" />
-                  </Button>
+                    <Camera className="w-4 h-4" strokeWidth={1.75} />
+                  </IconButton>
 
-                  <Button
-                    onClick={() => window.electronAPI?.quitApp()}
-                    variant="ghost"
-                    size="icon"
-                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 hover:scale-105 transition-all duration-200"
-                    title="Quit Application (⌘Q)"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
+                  {state.preferences.standaloneWindow ? (
+                    <>
+                      {/* Small vertical separator between app actions and
+                          window controls so the three Windows-style buttons
+                          read as a distinct group. */}
+                      <span
+                        className="mx-1 h-5"
+                        style={{ width: 1, background: 'var(--cream)' }}
                       />
-                    </svg>
-                  </Button>
+                      <WindowControls isMaximized={isMaximized} />
+                    </>
+                  ) : (
+                    <IconButton
+                      onClick={() => window.electronAPI?.quitApp()}
+                      title={t('app.quit')}
+                      ariaLabel={t('app.quitAria')}
+                      danger
+                      noDrag
+                    >
+                      <X className="w-4 h-4" strokeWidth={2} />
+                    </IconButton>
+                  )}
                 </div>
               </div>
 
-              {/* Navigation Tabs */}
-              <NavigationTabs
-                currentView={state.currentView}
-                onNavigate={navigateTo}
-                className="mb-3"
+          {/* Navigation Tabs */}
+          <NavigationTabs currentView={state.currentView} onNavigate={navigateTo} />
+        </header>
+
+        {/* Scrollable content region */}
+        <main className="flex-1 overflow-y-auto px-3 pt-4 pb-3">
+          <div className="space-y-3">
+            {state.currentView === 'dashboard' && (
+              <Dashboard stats={currentStats} status={usageStatus} />
+            )}
+
+            {state.currentView === 'analytics' && (
+              <Analytics stats={currentStats} preferences={state.preferences} />
+            )}
+
+            {state.currentView === 'terminal' && (
+              <TerminalView
+                stats={currentStats}
+                onRefresh={refreshData}
+                preferences={state.preferences}
               />
-            </header>
+            )}
 
-            {/* Content */}
-            <div className="space-y-3 pb-3">
-              {state.currentView === 'dashboard' && (
-                <Dashboard stats={currentStats} status={usageStatus} />
-              )}
-
-              {state.currentView === 'analytics' && (
-                <Analytics stats={currentStats} preferences={state.preferences} />
-              )}
-
-              {state.currentView === 'terminal' && (
-                <TerminalView
-                  stats={currentStats}
-                  onRefresh={refreshData}
-                  preferences={state.preferences}
-                />
-              )}
-
-              {state.currentView === 'settings' && (
-                <SettingsPanel
-                  preferences={state.preferences}
-                  onUpdatePreferences={updatePreferences}
-                  stats={currentStats}
-                />
-              )}
-            </div>
+            {state.currentView === 'settings' && (
+              <SettingsPanel
+                preferences={state.preferences}
+                onUpdatePreferences={updatePreferences}
+                stats={currentStats}
+              />
+            )}
           </div>
         </main>
       </div>

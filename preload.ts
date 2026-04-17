@@ -21,6 +21,29 @@ const electronAPI = {
   // Settings methods
   loadSettings: () => ipcRenderer.invoke('load-settings'),
   saveSettings: (settings: Record<string, unknown>) => ipcRenderer.invoke('save-settings', settings),
+  // Custom window controls (we draw our own title bar).
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  onWindowMaximizeChanged: (callback: (isMaximized: boolean) => void) => {
+    const listener = (_event: unknown, isMaximized: boolean) => callback(isMaximized);
+    ipcRenderer.on('window-maximize-changed', listener);
+    return listener;
+  },
+  removeWindowMaximizeChangedListener: (listener: (...args: unknown[]) => void) =>
+    ipcRenderer.removeListener('window-maximize-changed', listener),
+  // Mini HUD
+  miniHudGetContent: () => ipcRenderer.invoke('mini-hud-get-content'),
+  miniHudOpenMain: () => ipcRenderer.invoke('mini-hud-open-main'),
+  miniHudClose: () => ipcRenderer.invoke('mini-hud-close'),
+  onMiniHudContentChanged: (callback: (content: string) => void) => {
+    const listener = (_event: unknown, content: string) => callback(content);
+    ipcRenderer.on('mini-hud-content-changed', listener);
+    return listener;
+  },
+  removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) =>
+    ipcRenderer.removeListener('mini-hud-content-changed', listener),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

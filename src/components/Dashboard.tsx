@@ -1,4 +1,13 @@
+import {
+  CalendarDays,
+  CalendarRange,
+  Flame,
+  Gauge,
+  Info,
+  Layers,
+} from 'lucide-react';
 import type React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -6,6 +15,59 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Progress } from './ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+
+// Small Claude-style stat card wrapper used across the dashboard grid.
+// Uses lucide icons on a warm sand disc — no gradients, no glow.
+const StatCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}> = ({ icon, title, subtitle, children }) => (
+  <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+    <CardContent className="p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'var(--sand)', color: 'var(--terracotta)' }}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h3
+            className="font-serif leading-tight truncate"
+            style={{
+              color: 'var(--claude-black)',
+              fontSize: '18px',
+              fontWeight: 500,
+              letterSpacing: '-0.005em',
+            }}
+          >
+            {title}
+          </h3>
+          <p className="text-[11px]" style={{ color: 'var(--claude-stone)' }}>
+            {subtitle}
+          </p>
+        </div>
+      </div>
+      <div>{children}</div>
+    </CardContent>
+  </Card>
+);
+
+const StatRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex justify-between items-baseline">
+    <span className="text-[12px]" style={{ color: 'var(--claude-olive)' }}>
+      {label}
+    </span>
+    <span
+      className="text-[13px]"
+      style={{ color: 'var(--claude-black)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}
+    >
+      {value}
+    </span>
+  </div>
+);
 
 // Helper component for model usage item
 const ModelUsageItem = ({
@@ -26,13 +88,17 @@ const ModelUsageItem = ({
     return num.toLocaleString();
   };
 
-  const getModelColor = (index: number) => {
-    return index === 0 ? 'bg-purple-500' : index === 1 ? 'bg-blue-500' : 'bg-green-500';
+  // Warm palette dots to match the Claude design — terracotta primary,
+  // olive for secondary, sand-with-outline for tertiary.
+  const getModelDotStyle = (index: number): React.CSSProperties => {
+    if (index === 0) return { background: 'var(--terracotta)' };
+    if (index === 1) return { background: 'var(--claude-olive)' };
+    return { background: 'var(--sand)', boxShadow: '0 0 0 1px var(--ring-warm)' };
   };
 
   return (
     <div className="flex items-center gap-3">
-      <div className={`w-3 h-3 rounded-full ${getModelColor(index)}`} />
+      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={getModelDotStyle(index)} />
       <div className="flex-1">
         <div className="flex justify-between items-center mb-1">
           <Tooltip>
@@ -108,37 +174,62 @@ const getStatusHelpers = (status: 'safe' | 'warning' | 'critical') => {
 const KeyMetricsRow: React.FC<{
   stats: UsageStats;
 }> = ({ stats }) => {
-  const timeRemaining = stats.actualResetInfo?.formattedTimeRemaining || 'No active session';
+  const { t } = useTranslation();
+  const timeRemaining =
+    stats.actualResetInfo?.formattedTimeRemaining || t('dashboard.noActiveSession');
+
+  const metrics = [
+    {
+      value: formatNumber(stats.tokensUsed),
+      label: t('dashboard.tokensUsed'),
+      detail: t('dashboard.tokensUsedOf', { limit: formatNumber(stats.tokenLimit) }),
+    },
+    {
+      value: formatCurrency(stats.today.totalCost),
+      label: t('dashboard.costToday'),
+      detail: t('dashboard.costTodayTokens', { count: stats.today.totalTokens.toLocaleString() }),
+    },
+    {
+      value: formatNumber(stats.tokensRemaining),
+      label: t('dashboard.remaining'),
+      detail: timeRemaining,
+    },
+  ];
 
   return (
-    <div className="grid grid-cols-3 gap-4 text-center">
-      <div className="space-y-2">
-        <div className="text-2xl font-bold text-neutral-100 font-primary">
-          {formatNumber(stats.tokensUsed)}
+    <div className="grid grid-cols-3 gap-3">
+      {metrics.map((m, i) => (
+        <div
+          key={m.label}
+          className="text-left px-3 py-3 rounded-lg"
+          style={{
+            background: 'var(--parchment)',
+            border: '1px solid var(--cream)',
+            borderLeft: i === 0 ? '2px solid var(--terracotta)' : '1px solid var(--cream)',
+          }}
+        >
+          <div
+            className="font-serif leading-none mb-1"
+            style={{
+              color: 'var(--claude-black)',
+              fontSize: '22px',
+              fontWeight: 500,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {m.value}
+          </div>
+          <div
+            className="text-[11px] mb-0.5"
+            style={{ color: 'var(--claude-olive)', letterSpacing: '0.02em' }}
+          >
+            {m.label}
+          </div>
+          <div className="text-[10px]" style={{ color: 'var(--claude-stone)' }}>
+            {m.detail}
+          </div>
         </div>
-        <div className="text-sm text-neutral-400 font-primary">Tokens Used</div>
-        <div className="text-xs text-neutral-500 font-primary">
-          of {formatNumber(stats.tokenLimit)}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-2xl font-bold text-neutral-100 font-primary">
-          {formatCurrency(stats.today.totalCost)}
-        </div>
-        <div className="text-sm text-neutral-warm-400 font-primary">Cost Today</div>
-        <div className="text-xs text-neutral-500 font-primary">
-          {stats.today.totalTokens.toLocaleString()} tokens
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-2xl font-bold text-neutral-100 font-primary">
-          {formatNumber(stats.tokensRemaining)}
-        </div>
-        <div className="text-sm text-neutral-warm-400 font-primary">Remaining</div>
-        <div className="text-xs text-neutral-500 font-primary">{timeRemaining}</div>
-      </div>
+      ))}
     </div>
   );
 };
@@ -151,74 +242,67 @@ const CircularProgressChart: React.FC<{
   subtitle: string;
   emoji: string;
   isTime?: boolean;
-}> = ({ percentage, status, label, subtitle, emoji, isTime }) => (
-  <div className="flex items-center justify-center">
-    <div className="relative">
-      <svg width="180" height="180" className="transform -rotate-90">
-        <circle
-          cx="90"
-          cy="90"
-          r="75"
-          fill="none"
-          stroke="rgba(255, 255, 255, 0.1)"
-          strokeWidth="8"
-        />
-        <circle
-          cx="90"
-          cy="90"
-          r="75"
-          fill="none"
-          stroke={isTime ? 'url(#gradient-time)' : `url(#gradient-token-${status})`}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={`${2 * Math.PI * 75}`}
-          strokeDashoffset={`${2 * Math.PI * 75 * (1 - percentage / 100)}`}
-          className="transition-all duration-1000 ease-out"
-        />
-        {!isTime && status && (
-          <defs>
-            <linearGradient id={`gradient-token-${status}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop
-                offset="0%"
-                stopColor={
-                  status === 'critical' ? '#ef4444' : status === 'warning' ? '#f59e0b' : '#10b981'
-                }
-              />
-              <stop
-                offset="100%"
-                stopColor={
-                  status === 'critical' ? '#dc2626' : status === 'warning' ? '#d97706' : '#059669'
-                }
-              />
-            </linearGradient>
-          </defs>
-        )}
-        {isTime && (
-          <defs>
-            <linearGradient id="gradient-time" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="rgba(204, 120, 92, 1)" />
-              <stop offset="100%" stopColor="rgba(255, 107, 53, 1)" />
-            </linearGradient>
-          </defs>
-        )}
-      </svg>
+  /** Override the ring color (used for the reset-time variant so it always
+   *  reads as neutral/warm regardless of token status). */
+  ringColorOverride?: string;
+}> = ({ percentage, status, label, subtitle, ringColorOverride }) => {
+  // subtitle is already prepared by caller (localized "safe"/"warning"/"critical")
+  const ringColor =
+    ringColorOverride ??
+    (status === 'critical'
+      ? '#b53333' // error crimson
+      : status === 'warning'
+        ? '#c96442' // terracotta
+        : '#7a9b5f'); // muted green for safe
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-3xl font-bold text-neutral-100 mb-1 font-primary">
-            {Math.round(percentage)}%
-          </div>
-          <div className="text-sm text-neutral-400 uppercase tracking-wide font-primary">
-            {label}
-          </div>
-          <div className="text-xs text-neutral-500 mt-1 font-primary">
-            {emoji} {subtitle}
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative">
+        <svg width="168" height="168" className="transform -rotate-90">
+          <circle cx="84" cy="84" r="72" fill="none" stroke="#e8e6dc" strokeWidth="6" />
+          <circle
+            cx="84"
+            cy="84"
+            r="72"
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={`${2 * Math.PI * 72}`}
+            strokeDashoffset={`${2 * Math.PI * 72 * (1 - percentage / 100)}`}
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div
+              className="font-serif leading-none mb-1.5"
+              style={{
+                color: 'var(--claude-black)',
+                fontSize: '42px',
+                fontWeight: 500,
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {Math.round(percentage)}
+              <span style={{ fontSize: '24px', color: 'var(--claude-olive)' }}>%</span>
+            </div>
+            <div
+              className="text-[11px] uppercase mb-0.5"
+              style={{ color: 'var(--claude-stone)', letterSpacing: '0.08em' }}
+            >
+              {label}
+            </div>
+            <div className="text-[11px]" style={{ color: 'var(--claude-olive)' }}>
+              {subtitle}
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface DashboardProps {
   stats: UsageStats;
@@ -226,7 +310,14 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
+  const { t } = useTranslation();
   const { getStatusColor, getStatusIcon } = getStatusHelpers(status);
+  const statusWord =
+    status === 'critical'
+      ? t('dashboard.critical')
+      : status === 'warning'
+        ? t('dashboard.warning')
+        : t('dashboard.safe');
 
   return (
     <TooltipProvider>
@@ -235,22 +326,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
         <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
           <CardContent className="p-6">
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gradient mb-2 font-primary">Usage Dashboard</h2>
-              <p className="text-neutral-400 text-sm font-primary">
-                Real-time monitoring of your Claude API usage
+              <h2
+                className="font-serif mb-1.5"
+                style={{
+                  color: 'var(--claude-black)',
+                  fontSize: '24px',
+                  lineHeight: 1.2,
+                  letterSpacing: '-0.01em',
+                  fontWeight: 500,
+                }}
+              >
+                {t('dashboard.heroTitle')}
+              </h2>
+              <p className="text-[13px]" style={{ color: 'var(--claude-olive)' }}>
+                {t('dashboard.heroSubtitle')}
               </p>
             </div>
 
-            {/* Dual Progress Display - Token and Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            {/* Dual ring display — token usage on the left, 5-hour session
+                reset countdown on the right. Centered as a pair so the hero
+                reads as a balanced composition regardless of window width. */}
+            <div className="flex items-center justify-center gap-10 mb-8 flex-wrap">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div>
                     <CircularProgressChart
                       percentage={stats.percentageUsed}
                       status={status}
-                      label="Tokens"
-                      subtitle={status}
+                      label={t('dashboard.ringLabel')}
+                      subtitle={statusWord}
                       emoji={getStatusIcon()}
                     />
                   </div>
@@ -259,21 +363,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
                   <div className="text-center">
                     <p className="font-semibold">
                       {status === 'critical'
-                        ? '🔴 Critical Usage'
+                        ? t('dashboard.tooltipCriticalTitle')
                         : status === 'warning'
-                          ? '🟡 Warning Level'
-                          : '🟢 Safe Usage'}
+                          ? t('dashboard.tooltipWarningTitle')
+                          : t('dashboard.tooltipSafeTitle')}
                     </p>
                     <p className="text-sm mt-1">
                       {status === 'critical'
-                        ? 'Over 90% of daily limit used'
+                        ? t('dashboard.tooltipCriticalBody')
                         : status === 'warning'
-                          ? '70-90% of daily limit used'
-                          : 'Less than 70% of daily limit used'}
+                          ? t('dashboard.tooltipWarningBody')
+                          : t('dashboard.tooltipSafeBody')}
                     </p>
                   </div>
                 </TooltipContent>
               </Tooltip>
+
+              {(() => {
+                // Compute progress through the active 5-hour session window.
+                // The subtitle uses a compact `Xh Ym` format so it fits
+                // inside the ring — the service's own `formattedTimeRemaining`
+                // is a long sentence ("3 hours 20 minutes left") that would
+                // overflow the center stack.
+                const sessionMs = 5 * 60 * 60 * 1000;
+                const timeLeftMs = stats.actualResetInfo?.timeUntilReset ?? 0;
+                const elapsedMs = Math.max(0, Math.min(sessionMs, sessionMs - timeLeftMs));
+                const resetPct = stats.actualResetInfo?.nextResetTime
+                  ? (elapsedMs / sessionMs) * 100
+                  : 0;
+                const compactTime = (() => {
+                  if (!stats.actualResetInfo?.nextResetTime) return null;
+                  const ms = Math.max(0, timeLeftMs);
+                  const h = Math.floor(ms / (1000 * 60 * 60));
+                  const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+                  if (h > 0) return `${h}h ${m}m`;
+                  if (m > 0) return `${m}m`;
+                  return '<1m';
+                })();
+                const resetSubtitle = compactTime
+                  ? t('dashboard.resetRingSubtitle', { value: compactTime })
+                  : t('dashboard.resetRingNone');
+                return (
+                  <CircularProgressChart
+                    percentage={resetPct}
+                    label={t('dashboard.resetRingLabel')}
+                    subtitle={resetSubtitle}
+                    emoji=""
+                    ringColorOverride="#c96442"
+                  />
+                );
+              })()}
             </div>
 
             <KeyMetricsRow stats={stats} />
@@ -281,238 +420,91 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
         </Card>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Current Plan */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className={`w-10 h-10 rounded-xl bg-gradient-to-r ${getStatusColor()} flex items-center justify-center shadow-lg`}
-                >
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <h3 className="text-lg font-bold text-neutral-100 font-primary cursor-help">
-                        {stats.currentPlan}
-                      </h3>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        Your detected Claude plan based on daily token limit:{' '}
-                        {formatNumber(stats.tokenLimit)} tokens/day
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <p className="text-sm text-neutral-400 font-primary">Current Plan</p>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard
+            icon={<Layers className="w-4 h-4" strokeWidth={1.75} />}
+            title={stats.currentPlan}
+            subtitle={t('dashboard.plan')}
+          >
+            <div className="space-y-2">
+              <StatRow label={t('dashboard.dailyLimit')} value={formatNumber(stats.tokenLimit)} />
+              <Progress value={Math.min(stats.percentageUsed, 100)} className="w-full h-[6px]" />
+            </div>
+          </StatCard>
 
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-neutral-400 font-primary">Daily Limit</span>
-                  <span className="text-neutral-100 font-medium font-primary">
-                    {formatNumber(stats.tokenLimit)}
-                  </span>
-                </div>
-                <Progress value={Math.min(stats.percentageUsed, 100)} className="w-full h-2" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Burn Rate */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center shadow-lg">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <h3 className="text-lg font-bold text-neutral-100 font-primary cursor-help">
-                        {formatNumber(stats.burnRate)}
-                      </h3>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Rate of token consumption per hour based on your last 24 hours of usage</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <p className="text-sm text-neutral-400 font-primary cursor-help">
-                        Tokens/Hour
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        Current burn rate - how fast you're consuming your daily token allowance
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-neutral-400 font-primary cursor-help">
-                        Depletion Time
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        Estimated time until your daily token limit is reached at current usage rate
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className="text-neutral-100 font-medium font-primary">
-                    {stats.actualResetInfo?.formattedTimeRemaining || 'No active session'}
-                  </span>
-                </div>
-                <Badge
-                  variant={
+          <StatCard
+            icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
+            title={formatNumber(stats.burnRate)}
+            subtitle={t('dashboard.burnRate')}
+          >
+            <div className="space-y-2">
+              <StatRow
+                label={t('dashboard.depletion')}
+                value={
+                  stats.actualResetInfo?.formattedTimeRemaining || t('dashboard.noActiveSession')
+                }
+              />
+              <div
+                className="text-[11px] text-center py-1 rounded-md"
+                style={{
+                  color:
                     stats.burnRate > 1000
-                      ? 'destructive'
+                      ? 'var(--error-crimson)'
                       : stats.burnRate > 500
-                        ? 'secondary'
-                        : 'default'
-                  }
-                  className="w-full justify-center"
-                >
-                  {stats.burnRate > 1000
-                    ? 'High Usage'
-                    : stats.burnRate > 500
-                      ? 'Moderate Usage'
-                      : 'Normal Usage'}
-                </Badge>
+                        ? 'var(--terracotta)'
+                        : 'var(--claude-olive)',
+                  background: 'var(--parchment)',
+                  border: '1px solid var(--cream)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {stats.burnRate > 1000
+                  ? t('dashboard.usageHigh')
+                  : stats.burnRate > 500
+                    ? t('dashboard.usageModerate')
+                    : t('dashboard.usageNormal')}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </StatCard>
 
-          {/* Today's Usage */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Today</h3>
-                  <p className="text-sm text-neutral-400">Usage Summary</p>
-                </div>
-              </div>
+          <StatCard
+            icon={<CalendarDays className="w-4 h-4" strokeWidth={1.75} />}
+            title={t('dashboard.today')}
+            subtitle={t('dashboard.todaySubtitle')}
+          >
+            <div className="space-y-1.5">
+              <StatRow
+                label={t('dashboard.tokens')}
+                value={stats.today.totalTokens.toLocaleString()}
+              />
+              <StatRow label={t('dashboard.cost')} value={formatCurrency(stats.today.totalCost)} />
+              <StatRow
+                label={t('dashboard.models')}
+                value={String(Object.keys(stats.today.models).length)}
+              />
+            </div>
+          </StatCard>
 
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Tokens</span>
-                  <span className="text-white font-medium">
-                    {stats.today.totalTokens.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Cost</span>
-                  <span className="text-white font-medium">
-                    {formatCurrency(stats.today.totalCost)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Models</span>
-                  <span className="text-white font-medium">
-                    {Object.keys(stats.today.models).length}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* This Week */}
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center shadow-lg">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">This Week</h3>
-                  <p className="text-sm text-neutral-400">7-Day Summary</p>
-                </div>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Total Cost</span>
-                  <span className="text-white font-medium">
-                    {formatCurrency(stats.thisWeek.reduce((sum, day) => sum + day.totalCost, 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Total Tokens</span>
-                  <span className="text-white font-medium">
-                    {stats.thisWeek.reduce((sum, day) => sum + day.totalTokens, 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-400">Avg Daily</span>
-                  <span className="text-white font-medium">
-                    {formatCurrency(
-                      stats.thisWeek.reduce((sum, day) => sum + day.totalCost, 0) / 7
-                    )}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            icon={<CalendarRange className="w-4 h-4" strokeWidth={1.75} />}
+            title={t('dashboard.thisWeek')}
+            subtitle={t('dashboard.thisWeekSubtitle')}
+          >
+            <div className="space-y-1.5">
+              <StatRow
+                label={t('dashboard.totalCost')}
+                value={formatCurrency(stats.thisWeek.reduce((s, d) => s + d.totalCost, 0))}
+              />
+              <StatRow
+                label={t('dashboard.totalTokens')}
+                value={stats.thisWeek.reduce((s, d) => s + d.totalTokens, 0).toLocaleString()}
+              />
+              <StatRow
+                label={t('dashboard.avgDaily')}
+                value={formatCurrency(stats.thisWeek.reduce((s, d) => s + d.totalCost, 0) / 7)}
+              />
+            </div>
+          </StatCard>
         </div>
 
         {/* Model Breakdown */}
@@ -520,46 +512,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white">Model Usage</CardTitle>
-                <CardDescription>Today's distribution by model</CardDescription>
+                <CardTitle
+                  className="font-serif"
+                  style={{
+                    color: 'var(--claude-black)',
+                    fontSize: '18px',
+                    fontWeight: 500,
+                    letterSpacing: '-0.005em',
+                  }}
+                >
+                  {t('dashboard.modelUsage')}
+                </CardTitle>
+                <CardDescription style={{ color: 'var(--claude-olive)' }}>
+                  {t('dashboard.modelUsageDesc')}
+                </CardDescription>
               </div>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-neutral-400 hover:text-white"
+                    className="h-8 w-8 p-0"
+                    style={{ color: 'var(--claude-olive)' }}
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <Info className="w-4 h-4" strokeWidth={1.75} />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 bg-neutral-800 border-neutral-700 text-white">
                   <div className="space-y-3">
-                    <div className="font-semibold">Model Usage Breakdown</div>
+                    <div className="font-semibold">{t('dashboard.modelBreakdownTitle')}</div>
                     <div className="text-sm text-neutral-300 space-y-2">
-                      <p>
-                        • <strong>Tokens:</strong> Number of tokens consumed by each model today
-                      </p>
-                      <p>
-                        • <strong>Cost:</strong> Estimated cost based on model pricing
-                      </p>
-                      <p>
-                        • <strong>Percentage:</strong> Share of your total daily usage
-                      </p>
-                      <p>
-                        • <strong>Colors:</strong> Purple (primary), Blue (secondary), Green
-                        (tertiary)
-                      </p>
+                      <p>• {t('dashboard.modelBreakdownTokens')}</p>
+                      <p>• {t('dashboard.modelBreakdownCost')}</p>
+                      <p>• {t('dashboard.modelBreakdownPercentage')}</p>
+                      <p>• {t('dashboard.modelBreakdownColors')}</p>
                     </div>
                     <div className="text-xs text-neutral-400 border-t border-neutral-700 pt-2">
-                      Click on any model name for detailed tooltip information
+                      {t('dashboard.modelBreakdownHint')}
                     </div>
                   </div>
                 </PopoverContent>
@@ -593,7 +582,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status }) => {
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <p className="text-sm">No model usage data available</p>
+                  <p className="text-sm">{t('dashboard.modelUsageNoData')}</p>
                 </div>
               )}
             </div>

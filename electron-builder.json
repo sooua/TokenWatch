@@ -1,6 +1,6 @@
 {
-  "appId": "com.ccseva.app",
-  "productName": "CCSeva",
+  "appId": "com.tokenwatch.app",
+  "productName": "TokenWatch",
   "directories": {
     "output": "release"
   },
@@ -22,16 +22,16 @@
     "gatekeeperAssess": false,
     "extendInfo": {
       "LSUIElement": true,
-      "CFBundleDisplayName": "CCSeva",
-      "CFBundleName": "CCSeva",
-      "CFBundleExecutable": "CCSeva",
-      "NSHumanReadableCopyright": "Copyright © 2024 CCSeva. All rights reserved.",
+      "CFBundleDisplayName": "TokenWatch",
+      "CFBundleName": "TokenWatch",
+      "CFBundleExecutable": "TokenWatch",
+      "NSHumanReadableCopyright": "Copyright © 2026 TokenWatch contributors. All rights reserved.",
       "CFBundleDocumentTypes": [],
       "LSMinimumSystemVersion": "10.15.0"
     }
   },
   "dmg": {
-    "title": "CCSeva",
+    "title": "TokenWatch",
     "icon": "assets/icon.icns"
   },
   "win": {
@@ -54,10 +54,10 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "CCSeva",
+    "shortcutName": "TokenWatch",
     "installerIcon": "assets/icon.ico",
     "uninstallerIcon": "assets/icon.ico",
-    "uninstallDisplayName": "CCSeva"
+    "uninstallDisplayName": "TokenWatch"
   },
   "portable": {
     "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
