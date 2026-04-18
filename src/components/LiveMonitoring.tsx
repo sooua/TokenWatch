@@ -89,7 +89,9 @@ const StatusCard: React.FC<{
         <span className="text-sm text-neutral-400">{title}</span>
         <span className="text-lg">{emoji}</span>
       </div>
-      <div className="text-2xl font-bold mb-2" style={{ color: 'var(--claude-black)' }}>{value}</div>
+      <div className="text-2xl font-bold mb-2" style={{ color: 'var(--claude-black)' }}>
+        {value}
+      </div>
       <div className="w-full bg-neutral-800 rounded-full h-3 mb-2">
         <div
           className={`h-3 rounded-full bg-gradient-to-r ${colorClass} transition-all duration-1000`}
@@ -326,7 +328,9 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>{stats.currentPlan}</div>
+              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
+                {stats.currentPlan}
+              </div>
               <div className="text-sm text-neutral-400">Current Plan</div>
               <div className="text-xs text-neutral-500 mt-1">📊 Auto-detected</div>
             </div>

@@ -118,7 +118,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         handled = true;
         const err = (payload?.error as string | undefined) || '';
         finish(() =>
-          toast.error(err ? `${t('update.error')} — ${err}` : t('update.error'), { id: toastId }),
+          toast.error(err ? `${t('update.error')} — ${err}` : t('update.error'), { id: toastId })
         );
         cleanup();
       }
@@ -220,13 +220,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 className="rounded-lg px-3 py-2 border"
                 style={{ background: 'var(--sand)', borderColor: 'var(--cream)' }}
               >
-                <div
-                  className="text-sm font-medium"
-                  style={{ color: 'var(--claude-black)' }}
-                >
+                <div className="text-sm font-medium" style={{ color: 'var(--claude-black)' }}>
                   {preferences.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
                 </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>{t('settings.timezoneAutoHint')}</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
+                  {t('settings.timezoneAutoHint')}
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -329,7 +328,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             <div className="ml-11 space-y-3">
               <div>
-                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.planSelection')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>
+                  {t('settings.planSelection')}
+                </div>
                 <Select
                   value={preferences.plan || 'auto'}
                   onValueChange={(value) =>
@@ -354,7 +355,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
               {preferences.plan === 'Custom' && (
                 <div>
-                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.customLimitLabel')}</div>
+                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>
+                    {t('settings.customLimitLabel')}
+                  </div>
                   <input
                     type="number"
                     min="1000"
@@ -375,7 +378,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     }}
                     placeholder={t('settings.customLimitPlaceholder')}
                   />
-                  <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>{t('settings.customLimitHint')}</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
+                    {t('settings.customLimitHint')}
+                  </div>
                 </div>
               )}
 
@@ -400,7 +405,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             <div className="ml-11 space-y-3">
               <div>
-                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.displayMode')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>
+                  {t('settings.displayMode')}
+                </div>
                 <Select
                   value={preferences.menuBarDisplayMode || 'alternate'}
                   onValueChange={(value: 'percentage' | 'cost' | 'alternate') =>
@@ -432,7 +439,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               {/* Cost Basis for Menu Bar (hidden when Percentage Only is selected) */}
               {preferences.menuBarDisplayMode !== 'percentage' && (
                 <div>
-                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.costBasis')}</div>
+                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>
+                    {t('settings.costBasis')}
+                  </div>
                   <Select
                     value={preferences.menuBarCostSource || 'today'}
                     onValueChange={(value: 'today' | 'sessionWindow') =>
@@ -501,7 +510,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
             {preferences.miniHud && (
               <div className="ml-11">
-                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.miniHudContent')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>
+                  {t('settings.miniHudContent')}
+                </div>
                 <Select
                   value={preferences.miniHudContent || 'percentageCost'}
                   onValueChange={(value) =>

@@ -49,10 +49,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               <div className="text-6xl mb-6 floating">💥</div>
 
               {/* Error Title */}
-              <h2
-                className="text-2xl font-bold mb-4"
-                style={{ color: 'var(--claude-black)' }}
-              >
+              <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--claude-black)' }}>
                 Something went wrong
               </h2>
 
@@ -104,10 +101,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               </div>
 
               {/* Help Text */}
-              <div
-                className="mt-6 text-sm space-y-2"
-                style={{ color: 'var(--claude-stone)' }}
-              >
+              <div className="mt-6 text-sm space-y-2" style={{ color: 'var(--claude-stone)' }}>
                 <p>If this problem persists:</p>
                 <div className="flex flex-col space-y-1 text-xs">
                   <span>• Try restarting the application</span>
@@ -118,10 +112,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
               {/* Debug Info */}
               {process.env.NODE_ENV === 'development' && (
-                <div
-                  className="mt-6 pt-4 border-t"
-                  style={{ borderColor: 'var(--cream)' }}
-                >
+                <div className="mt-6 pt-4 border-t" style={{ borderColor: 'var(--cream)' }}>
                   <details className="text-left">
                     <summary
                       className="text-xs cursor-pointer"
