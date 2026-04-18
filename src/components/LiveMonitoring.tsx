@@ -89,7 +89,7 @@ const StatusCard: React.FC<{
         <span className="text-sm text-neutral-400">{title}</span>
         <span className="text-lg">{emoji}</span>
       </div>
-      <div className="text-2xl font-bold text-white mb-2">{value}</div>
+      <div className="text-2xl font-bold mb-2" style={{ color: 'var(--claude-black)' }}>{value}</div>
       <div className="w-full bg-neutral-800 rounded-full h-3 mb-2">
         <div
           className={`h-3 rounded-full bg-gradient-to-r ${colorClass} transition-all duration-1000`}
@@ -193,7 +193,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
   return (
     <div className="space-y-4">
       {/* Header with Controls */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -215,11 +215,12 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
                 onClick={() => setIsLiveMode(!isLiveMode)}
                 variant={isLiveMode ? 'secondary' : 'default'}
                 size="sm"
-                className={`text-sm px-3 py-1 transition-all duration-200 ${
+                className="text-sm px-3 py-1 transition-all duration-200"
+                style={
                   isLiveMode
-                    ? 'bg-gray-600 hover:bg-gray-700 text-white'
-                    : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20'
-                }`}
+                    ? { background: 'var(--sand)', color: 'var(--claude-black)' }
+                    : { background: 'var(--terracotta)', color: 'var(--ivory)' }
+                }
               >
                 {isLiveMode ? 'Pause' : 'Resume'}
               </Button>
@@ -250,11 +251,13 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
       </Card>
 
       {/* Terminal-style Output */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-bold text-white">Live Feed</h3>
+              <h3 className="text-lg font-bold" style={{ color: 'var(--claude-black)' }}>
+                Live Feed
+              </h3>
               <div className="flex gap-1">
                 <div className="w-3 h-3 bg-red-500 rounded-full" />
                 <div className="w-3 h-3 bg-yellow-500 rounded-full" />
@@ -268,10 +271,16 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
           </div>
 
           {/* Terminal Window */}
-          <div className="bg-black/50 rounded-lg border border-white/10 p-4 font-mono text-sm">
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/10">
+          <div
+            className="rounded-lg border p-4 font-mono text-sm"
+            style={{ background: 'var(--claude-black)', borderColor: 'var(--ring-deep)' }}
+          >
+            <div
+              className="flex items-center gap-2 mb-3 pb-2 border-b"
+              style={{ borderColor: 'var(--ring-deep)' }}
+            >
               <span className="text-green-400">●</span>
-              <span className="text-white">ccmonitor@live</span>
+              <span style={{ color: 'var(--ivory)' }}>ccmonitor@live</span>
               <span className="text-neutral-400">~</span>
             </div>
 
@@ -300,14 +309,14 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
       </Card>
 
       {/* Current Session Info */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardHeader>
-          <CardTitle className="text-white">Current Session</CardTitle>
+          <CardTitle style={{ color: 'var(--claude-black)' }}>Current Session</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">
+              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {formatNumber(stats.burnRate)}
               </div>
               <div className="text-sm text-neutral-400">Tokens/Hour</div>
@@ -317,13 +326,13 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">{stats.currentPlan}</div>
+              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>{stats.currentPlan}</div>
               <div className="text-sm text-neutral-400">Current Plan</div>
               <div className="text-xs text-neutral-500 mt-1">📊 Auto-detected</div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">
+              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {stats.velocity?.trend === 'increasing'
                   ? '📈'
                   : stats.velocity?.trend === 'decreasing'
@@ -337,7 +346,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">
+              <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {stats.prediction?.confidence || 0}%
               </div>
               <div className="text-sm text-neutral-400">Confidence</div>
@@ -348,13 +357,13 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
       </Card>
 
       {/* Quick Actions */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardContent className="p-4">
           <div className="grid grid-cols-3 gap-3">
             <Button
               onClick={onRefresh}
               variant="ghost"
-              className="flex items-center justify-center gap-2 py-3 h-auto hover:bg-white/10 transition-all duration-200"
+              className="flex items-center justify-center gap-2 py-3 h-auto transition-all duration-200 hover:bg-[var(--sand)]"
             >
               <span>🔄</span>
               Force Refresh
@@ -363,7 +372,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
             <Button
               onClick={() => addLogEntry('info', 'Manual checkpoint created', '📍')}
               variant="ghost"
-              className="flex items-center justify-center gap-2 py-3 h-auto hover:bg-white/10 transition-all duration-200"
+              className="flex items-center justify-center gap-2 py-3 h-auto transition-all duration-200 hover:bg-[var(--sand)]"
             >
               <span>📍</span>
               Checkpoint
@@ -372,7 +381,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
             <Button
               onClick={() => setLogs([])}
               variant="ghost"
-              className="flex items-center justify-center gap-2 py-3 h-auto hover:bg-white/10 transition-all duration-200"
+              className="flex items-center justify-center gap-2 py-3 h-auto transition-all duration-200 hover:bg-[var(--sand)]"
             >
               <span>🗑️</span>
               Clear Logs

@@ -18,7 +18,7 @@ const StatCard: React.FC<{
   subtitle: string;
   children: React.ReactNode;
 }> = ({ icon, title, subtitle, children }) => (
-  <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+  <Card className="bg-[var(--ivory)] border-[var(--cream)]">
     <CardContent className="p-4">
       <div className="flex items-center gap-3 mb-3">
         <div
@@ -97,7 +97,12 @@ const ModelUsageItem = ({
         <div className="flex justify-between items-center mb-1">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-sm font-medium text-white cursor-help">{modelName}</span>
+              <span
+                className="text-sm font-medium cursor-help"
+                style={{ color: 'var(--claude-black)' }}
+              >
+                {modelName}
+              </span>
             </TooltipTrigger>
             <TooltipContent>
               <div className="text-center">
@@ -320,7 +325,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
     <TooltipProvider>
       <div className="space-y-4">
         {/* Hero Section */}
-        <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+        <Card className="bg-[var(--ivory)] border-[var(--cream)]">
           <CardContent className="p-6">
             <div className="mb-6">
               <h2
@@ -510,7 +515,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
         {showCodex && <CodexCard />}
 
         {/* Model Breakdown */}
-        <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+        <Card className="bg-[var(--ivory)] border-[var(--cream)]">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -540,7 +545,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
                     <Info className="w-4 h-4" strokeWidth={1.75} />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 bg-neutral-800 border-neutral-700 text-white">
+                <PopoverContent
+                  className="w-80 border"
+                  style={{
+                    background: 'var(--ivory)',
+                    borderColor: 'var(--cream)',
+                    color: 'var(--claude-black)',
+                  }}
+                >
                   <div className="space-y-3">
                     <div className="font-semibold">{t('dashboard.modelBreakdownTitle')}</div>
                     <div className="text-sm text-neutral-300 space-y-2">
@@ -593,7 +605,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
 
         {/* Quick Actions */}
         {/* <div className="glass-card p-4">
-        <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
+        <h3
+          className="text-lg font-bold mb-4"
+          style={{ color: 'var(--claude-black)' }}
+        >
+          Quick Actions
+        </h3>
         
         <div className="grid grid-cols-2 gap-3">
           <button className="btn btn-ghost flex items-center justify-center gap-2 py-3">

@@ -15,6 +15,7 @@ import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import type { UsageStats } from '../types/usage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -83,6 +84,67 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   // the system-preference media query for us.
   const { theme, setTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  // Manual "check for updates now" flow. The button used to fire an IPC and
+  // show nothing on the happy path — an update-to-date result was silently
+  // swallowed by the banner's status filter. We now toast checking → result
+  // so the user always gets feedback.
+  const handleCheckNow = () => {
+    if (isCheckingUpdate) return;
+    setIsCheckingUpdate(true);
+    const toastId = toast.loading(t('update.checking'));
+
+    const finish = (render: () => void) => {
+      render();
+      setIsCheckingUpdate(false);
+    };
+
+    let handled = false;
+    const listener = (payload: Record<string, unknown>) => {
+      const status = payload?.status as string | undefined;
+      if (handled) return;
+      if (status === 'available') {
+        handled = true;
+        // Banner will appear — just clear the loading toast.
+        toast.dismiss(toastId);
+        setIsCheckingUpdate(false);
+        cleanup();
+      } else if (status === 'not-available') {
+        handled = true;
+        finish(() => toast.success(t('update.upToDate'), { id: toastId }));
+        cleanup();
+      } else if (status === 'error') {
+        handled = true;
+        const err = (payload?.error as string | undefined) || '';
+        finish(() =>
+          toast.error(err ? `${t('update.error')} — ${err}` : t('update.error'), { id: toastId }),
+        );
+        cleanup();
+      }
+    };
+
+    const cleanup = () => {
+      if (registered) {
+        window.electronAPI?.removeUpdateStatusListener?.(registered);
+      }
+      if (timer) clearTimeout(timer);
+    };
+
+    const registered = window.electronAPI?.onUpdateStatus?.(listener);
+
+    // Safety timeout — network hiccup or no network. electron-updater will
+    // also surface this as an error event, but we don't want the spinner to
+    // hang forever if the emit path is silent for any reason.
+    const timer = setTimeout(() => {
+      if (handled) return;
+      handled = true;
+      finish(() => toast.error(t('update.error'), { id: toastId }));
+      cleanup();
+    }, 30000);
+
+    window.electronAPI?.updateCheck?.();
+  };
 
   const handlePreferenceChange = (key: string, value: boolean | number | string) => {
     onUpdatePreferences({ [key]: value });
@@ -123,7 +185,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div className="space-y-6 stagger-children">
       {/* Header */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardHeader>
           <CardTitle
             className="font-serif"
@@ -143,7 +205,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </Card>
 
       {/* General Settings */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardContent className="p-6 space-y-6">
           {/* Timezone Configuration */}
           <div className="space-y-3">
@@ -154,11 +216,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             />
 
             <div className="ml-11 space-y-3">
-              <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                <div className="text-white text-sm font-medium">
+              <div
+                className="rounded-lg px-3 py-2 border"
+                style={{ background: 'var(--sand)', borderColor: 'var(--cream)' }}
+              >
+                <div
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--claude-black)' }}
+                >
                   {preferences.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
                 </div>
-                <div className="text-white/50 text-xs mt-1">{t('settings.timezoneAutoHint')}</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>{t('settings.timezoneAutoHint')}</div>
               </div>
 
               <div className="space-y-3">
@@ -218,7 +286,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   handlePreferenceChange('language', value as 'auto' | 'en' | 'zh')
                 }
               >
-                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                <SelectTrigger className="w-full bg-[var(--sand)] border-[var(--cream)] text-[var(--claude-black)]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -239,7 +307,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             />
             <div className="ml-11">
               <Select value={theme || 'system'} onValueChange={(value) => setTheme(value)}>
-                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                <SelectTrigger className="w-full bg-[var(--sand)] border-[var(--cream)] text-[var(--claude-black)]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -261,7 +329,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             <div className="ml-11 space-y-3">
               <div>
-                <div className="text-white/70 text-sm mb-2">{t('settings.planSelection')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.planSelection')}</div>
                 <Select
                   value={preferences.plan || 'auto'}
                   onValueChange={(value) =>
@@ -271,7 +339,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     )
                   }
                 >
-                  <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                  <SelectTrigger className="w-full bg-[var(--sand)] border-[var(--cream)] text-[var(--claude-black)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -286,7 +354,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
               {preferences.plan === 'Custom' && (
                 <div>
-                  <div className="text-white/70 text-sm mb-2">{t('settings.customLimitLabel')}</div>
+                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.customLimitLabel')}</div>
                   <input
                     type="number"
                     min="1000"
@@ -299,10 +367,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         Number.parseInt(e.target.value) || 0
                       )
                     }
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder:text-white/50 focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-lg px-3 py-2 border focus:outline-none"
+                    style={{
+                      background: 'var(--sand)',
+                      borderColor: 'var(--cream)',
+                      color: 'var(--claude-black)',
+                    }}
                     placeholder={t('settings.customLimitPlaceholder')}
                   />
-                  <div className="text-white/50 text-xs mt-1">{t('settings.customLimitHint')}</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>{t('settings.customLimitHint')}</div>
                 </div>
               )}
 
@@ -327,14 +400,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             <div className="ml-11 space-y-3">
               <div>
-                <div className="text-white/70 text-sm mb-2">{t('settings.displayMode')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.displayMode')}</div>
                 <Select
                   value={preferences.menuBarDisplayMode || 'alternate'}
                   onValueChange={(value: 'percentage' | 'cost' | 'alternate') =>
                     handlePreferenceChange('menuBarDisplayMode', value)
                   }
                 >
-                  <SelectTrigger className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10">
+                  <SelectTrigger className="w-full bg-[var(--sand)]/60 border-[var(--cream)] text-[var(--claude-black)] hover:bg-[var(--sand)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -359,14 +432,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               {/* Cost Basis for Menu Bar (hidden when Percentage Only is selected) */}
               {preferences.menuBarDisplayMode !== 'percentage' && (
                 <div>
-                  <div className="text-white/70 text-sm mb-2">{t('settings.costBasis')}</div>
+                  <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.costBasis')}</div>
                   <Select
                     value={preferences.menuBarCostSource || 'today'}
                     onValueChange={(value: 'today' | 'sessionWindow') =>
                       handlePreferenceChange('menuBarCostSource', value)
                     }
                   >
-                    <SelectTrigger className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10">
+                    <SelectTrigger className="w-full bg-[var(--sand)]/60 border-[var(--cream)] text-[var(--claude-black)] hover:bg-[var(--sand)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -374,7 +447,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       <SelectItem value="sessionWindow">{t('settings.costSession')}</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="text-white/50 text-xs mt-2">
+                  <div className="text-xs mt-2" style={{ color: 'var(--claude-stone)' }}>
                     When set to Current session window, the menu bar cost reflects the rolling
                     5-hour session window instead of today's total.
                   </div>
@@ -428,7 +501,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
             {preferences.miniHud && (
               <div className="ml-11">
-                <div className="text-white/70 text-sm mb-2">{t('settings.miniHudContent')}</div>
+                <div className="text-sm mb-2" style={{ color: 'var(--claude-olive)' }}>{t('settings.miniHudContent')}</div>
                 <Select
                   value={preferences.miniHudContent || 'percentageCost'}
                   onValueChange={(value) =>
@@ -438,7 +511,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     )
                   }
                 >
-                  <SelectTrigger className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10">
+                  <SelectTrigger className="w-full bg-[var(--sand)]/60 border-[var(--cream)] text-[var(--claude-black)] hover:bg-[var(--sand)]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -488,21 +561,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div className="ml-11">
               <button
                 type="button"
-                onClick={() => window.electronAPI?.updateCheck?.()}
-                className="px-3 py-1.5 rounded-md text-[12px] transition-colors"
+                onClick={handleCheckNow}
+                disabled={isCheckingUpdate}
+                className="px-3 py-1.5 rounded-md text-[12px] transition-colors disabled:opacity-60 disabled:cursor-wait"
                 style={{
                   color: 'var(--claude-warm)',
                   background: 'var(--sand)',
                   boxShadow: '0 0 0 1px var(--ring-warm)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--cream)';
+                  if (!isCheckingUpdate) e.currentTarget.style.background = 'var(--cream)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'var(--sand)';
                 }}
               >
-                {t('update.checkNow')}
+                {isCheckingUpdate ? t('update.checking') : t('update.checkNow')}
               </button>
             </div>
           </div>

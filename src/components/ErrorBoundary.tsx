@@ -39,19 +39,28 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-screen w-full gradient-bg flex items-center justify-center p-6">
-          <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800 max-w-lg w-full">
+        <div
+          className="h-screen w-full flex items-center justify-center p-6"
+          style={{ background: 'var(--parchment)' }}
+        >
+          <Card className="bg-[var(--ivory)] border-[var(--cream)] max-w-lg w-full">
             <CardContent className="text-center stagger-children p-6">
               {/* Error Icon */}
               <div className="text-6xl mb-6 floating">💥</div>
 
               {/* Error Title */}
-              <h2 className="text-white text-2xl font-bold mb-4 text-shadow">
+              <h2
+                className="text-2xl font-bold mb-4"
+                style={{ color: 'var(--claude-black)' }}
+              >
                 Something went wrong
               </h2>
 
               {/* Error Description */}
-              <p className="text-white/80 text-base mb-6 leading-relaxed">
+              <p
+                className="text-base mb-6 leading-relaxed"
+                style={{ color: 'var(--claude-olive)' }}
+              >
                 An unexpected error occurred in the application. This might be a temporary issue.
               </p>
 
@@ -74,7 +83,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 <Button
                   type="button"
                   onClick={this.handleReset}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 transition-all duration-200 hover:scale-105"
+                  className="w-full transition-all duration-200"
+                  style={{ background: 'var(--terracotta)', color: 'var(--ivory)' }}
                 >
                   Try Again
                 </Button>
@@ -82,14 +92,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   type="button"
                   onClick={this.handleReload}
                   variant="outline"
-                  className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-200 hover:scale-105"
+                  className="w-full transition-all duration-200"
+                  style={{
+                    background: 'var(--sand)',
+                    borderColor: 'var(--cream)',
+                    color: 'var(--claude-black)',
+                  }}
                 >
                   Reload Application
                 </Button>
               </div>
 
               {/* Help Text */}
-              <div className="mt-6 text-white/60 text-sm space-y-2">
+              <div
+                className="mt-6 text-sm space-y-2"
+                style={{ color: 'var(--claude-stone)' }}
+              >
                 <p>If this problem persists:</p>
                 <div className="flex flex-col space-y-1 text-xs">
                   <span>• Try restarting the application</span>
@@ -100,12 +118,24 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
               {/* Debug Info */}
               {process.env.NODE_ENV === 'development' && (
-                <div className="mt-6 pt-4 border-t border-white/10">
+                <div
+                  className="mt-6 pt-4 border-t"
+                  style={{ borderColor: 'var(--cream)' }}
+                >
                   <details className="text-left">
-                    <summary className="text-white/60 text-xs cursor-pointer hover:text-white/80">
+                    <summary
+                      className="text-xs cursor-pointer"
+                      style={{ color: 'var(--claude-stone)' }}
+                    >
                       Show Debug Information
                     </summary>
-                    <div className="mt-2 p-3 bg-black/20 rounded text-xs font-mono text-white/70 max-h-40 overflow-auto">
+                    <div
+                      className="mt-2 p-3 rounded text-xs font-mono max-h-40 overflow-auto"
+                      style={{
+                        background: 'var(--sand)',
+                        color: 'var(--claude-olive)',
+                      }}
+                    >
                       <div>User Agent: {navigator.userAgent}</div>
                       <div>Timestamp: {new Date().toISOString()}</div>
                       <div>URL: {window.location.href}</div>

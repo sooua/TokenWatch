@@ -234,7 +234,7 @@ const MainChart: React.FC<{
       : `${linePath} L ${points[points.length - 1].x} ${padding.top + plotHeight} L ${padding.left} ${padding.top + plotHeight} Z`;
 
   return (
-    <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+    <Card className="bg-[var(--ivory)] border-[var(--cream)]">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -375,7 +375,7 @@ const MainChart: React.FC<{
                     cx={p.x}
                     cy={p.y}
                     r="3"
-                    fill="#faf9f5"
+                    fill="var(--ivory)"
                     stroke="#c96442"
                     strokeWidth="1.75"
                   />
@@ -539,7 +539,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -629,7 +629,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
       />
 
       {/* Model Distribution */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -774,7 +774,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
       </Card>
 
       {/* Performance */}
-      <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+      <Card className="bg-[var(--ivory)] border-[var(--cream)]">
         <CardHeader>
           <CardTitle
             className="font-serif"

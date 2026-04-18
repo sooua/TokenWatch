@@ -9,6 +9,28 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-04-18
+### Fixed
+- **"Check for updates now" silent failure** — the button fired an IPC
+  and then showed nothing on the happy path. `UpdateBanner` only
+  rendered for `available / downloading / downloaded / error`, so a
+  successful "already on latest" result was swallowed and the user
+  interpreted it as broken. The button now toasts a checking spinner,
+  then success ("you are on the latest version"), error, or falls
+  silent only when the banner itself will take over.
+- **Dark mode hardcoded colours** — swept 60+ occurrences across
+  Dashboard / Analytics / LiveMonitoring / SettingsPanel /
+  ErrorBoundary / CodexCard / Tooltip / Select / Popover / Switch
+  that used `bg-neutral-900/80`, `text-white`, `#faf9f5`, `#141413`
+  etc. and replaced them with the semantic CSS variables
+  (`var(--ivory)`, `var(--claude-black)`, `var(--cream)`, etc.)
+  so they flip correctly when the theme switches. Terminal view is
+  intentionally left dark — it's designed as a terminal panel.
+- **CI lockfile** — sharp / png2icons / vitest installations on
+  Windows did not record their Linux-specific optional deps in
+  `package-lock.json`. Regenerated with `--include=optional` so
+  `npm ci` on `ubuntu-latest` succeeds.
+
 ## [0.5.0] — 2026-04-18
 ### Added
 - **Dark mode** — warm ink dark palette ("library at dusk", not neon

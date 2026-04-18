@@ -148,7 +148,7 @@ export const CodexCard: React.FC = () => {
   const contextPct = contextWindow > 0 ? (totalTokens / contextWindow) * 100 : 0;
 
   return (
-    <Card className="bg-neutral-900/80 backdrop-blur-sm border-neutral-800">
+    <Card className="bg-[var(--ivory)] border-[var(--cream)]">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
