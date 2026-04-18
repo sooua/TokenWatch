@@ -126,7 +126,7 @@ const WindowControls: React.FC<{ isMaximized: boolean }> = ({ isMaximized }) => 
         onClick={() => window.electronAPI?.windowClose?.()}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'var(--terracotta)';
-          e.currentTarget.style.color = '#faf9f5';
+          e.currentTarget.style.color = 'var(--ivory)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'transparent';
@@ -587,11 +587,19 @@ const App: React.FC = () => {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-4">{t('app.connectionError')}</h2>
-            <p className="text-neutral-300 mb-6">{state.error}</p>
+            <h2
+              className="text-xl font-bold mb-4"
+              style={{ color: 'var(--claude-black)' }}
+            >
+              {t('app.connectionError')}
+            </h2>
+            <p className="mb-6" style={{ color: 'var(--claude-olive)' }}>
+              {state.error}
+            </p>
             <Button
               onClick={() => loadUsageStats()}
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 transition-all duration-200"
+              className="w-full transition-all duration-200"
+              style={{ background: 'var(--terracotta)', color: 'var(--ivory)' }}
             >
               {t('app.tryAgain')}
             </Button>

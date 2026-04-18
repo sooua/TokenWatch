@@ -106,10 +106,10 @@ export const MiniHud: React.FC = () => {
       className="w-screen h-screen flex items-center px-3 gap-3"
       style={
         {
-          background: 'rgba(250, 249, 245, 0.96)',
+          background: 'var(--ivory)',
           border: '1px solid var(--cream)',
           borderRadius: 12,
-          boxShadow: '0 8px 24px rgba(20, 20, 19, 0.12), 0 0 0 1px rgba(20, 20, 19, 0.04)',
+          boxShadow: 'var(--shadow-whisper-md)',
           color: 'var(--claude-black)',
           WebkitAppRegion: 'drag',
           cursor: 'grab',
@@ -137,7 +137,7 @@ export const MiniHud: React.FC = () => {
       >
         <div className="relative" style={{ width: 36, height: 36 }}>
           <svg width="36" height="36" className="transform -rotate-90">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="#e8e6dc" strokeWidth="3" />
+            <circle cx="18" cy="18" r="14" fill="none" stroke="var(--sand)" strokeWidth="3" />
             <circle
               cx="18"
               cy="18"

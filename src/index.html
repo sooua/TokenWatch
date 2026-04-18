@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TokenWatch</title>
+    <!-- Pre-hydration theme resolution. Runs before body paints so the
+         first frame uses the correct background (no white flash when the
+         user prefers dark). Mirrors next-themes' internal algorithm:
+         stored value ≠ "system" wins, otherwise fall back to the OS
+         preference via matchMedia. -->
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem('tokenwatch-theme');
+                var theme = stored;
+                if (!theme || theme === 'system') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                if (theme === 'dark') document.documentElement.classList.add('dark');
+            } catch (_) {
+                /* localStorage / matchMedia unavailable — stay light. */
+            }
+        })();
+    </script>
     <style>
         body {
             margin: 0;
@@ -11,6 +30,9 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
             background: #f5f4ed;
             overflow: hidden;
+        }
+        html.dark body {
+            background: #1a1917;
         }
         #root {
             height: 100vh;

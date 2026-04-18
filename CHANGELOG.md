@@ -9,6 +9,29 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-04-18
+### Fixed
+- **Dark mode end-to-end coverage.** v0.5.1 swept component-level
+  hardcoded colors, but `tailwind.config.js` still resolved the
+  named palette (`bg-parchment`, `text-claude-black`, `bg-terracotta`,
+  etc.) to literal hex values, so any `className="bg-parchment"` was
+  frozen at its light-mode colour. Every Claude palette token now
+  resolves to its matching `var(--…)` CSS variable (defined in
+  `:root` for light and `.dark` for the override), so the entire app
+  flips in one place.
+- Added shadcn semantic aliases (`background`, `foreground`,
+  `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`,
+  `input`, `card`, `popover`) that map to the Claude palette — this
+  lights up the Button / Alert / Progress / Slider / Card / Select /
+  Sonner primitives that were already using shadcn class names.
+- Pre-hydration inline script in `index.html` applies the `.dark`
+  class before React mounts, so the first paint is the correct
+  theme — no white flash when the user's preference is dark.
+- Swept the last few leftovers: MiniHud translucent background,
+  Dashboard hero ring, Analytics chart gridlines, Dashboard popover
+  body copy, Mini HUD ring track, shadcn Switch track, Tabs hover
+  colour, Select item text.
+
 ## [0.5.1] — 2026-04-18
 ### Fixed
 - **"Check for updates now" silent failure** — the button fired an IPC

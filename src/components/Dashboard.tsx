@@ -116,7 +116,7 @@ const ModelUsageItem = ({
               </div>
             </TooltipContent>
           </Tooltip>
-          <span className="text-sm text-neutral-400">
+          <span className="text-sm" style={{ color: 'var(--claude-olive)' }}>
             {formatNumber(modelData.tokens)} ({percentage.toFixed(1)}%)
           </span>
         </div>
@@ -258,7 +258,7 @@ const CircularProgressChart: React.FC<{
     <div className="flex items-center justify-center">
       <div className="relative">
         <svg width="168" height="168" className="transform -rotate-90">
-          <circle cx="84" cy="84" r="72" fill="none" stroke="#e8e6dc" strokeWidth="6" />
+          <circle cx="84" cy="84" r="72" fill="none" stroke="var(--sand)" strokeWidth="6" />
           <circle
             cx="84"
             cy="84"
@@ -555,13 +555,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
                 >
                   <div className="space-y-3">
                     <div className="font-semibold">{t('dashboard.modelBreakdownTitle')}</div>
-                    <div className="text-sm text-neutral-300 space-y-2">
+                    <div className="text-sm space-y-2" style={{ color: 'var(--claude-olive)' }}>
                       <p>• {t('dashboard.modelBreakdownTokens')}</p>
                       <p>• {t('dashboard.modelBreakdownCost')}</p>
                       <p>• {t('dashboard.modelBreakdownPercentage')}</p>
                       <p>• {t('dashboard.modelBreakdownColors')}</p>
                     </div>
-                    <div className="text-xs text-neutral-400 border-t border-neutral-700 pt-2">
+                    <div
+                      className="text-xs pt-2 border-t"
+                      style={{
+                        color: 'var(--claude-stone)',
+                        borderColor: 'var(--cream)',
+                      }}
+                    >
                       {t('dashboard.modelBreakdownHint')}
                     </div>
                   </div>
@@ -582,7 +588,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
                   />
                 ))
               ) : (
-                <div className="text-center py-8 text-neutral-400">
+                <div className="text-center py-8" style={{ color: 'var(--claude-stone)' }}>
                   <svg
                     className="w-12 h-12 mx-auto mb-3 opacity-50"
                     fill="none"

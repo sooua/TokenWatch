@@ -304,7 +304,7 @@ const MainChart: React.FC<{
                   y1={padding.top + plotHeight * ratio}
                   x2={padding.left + plotWidth}
                   y2={padding.top + plotHeight * ratio}
-                  stroke="#e8e6dc"
+                  stroke="var(--sand)"
                   strokeDasharray={ratio === 1 ? undefined : '3,3'}
                   strokeWidth={ratio === 1 ? 1 : 1}
                 />
@@ -323,7 +323,7 @@ const MainChart: React.FC<{
                     y={y + 3}
                     textAnchor="end"
                     fontSize="10"
-                    fill="#87867f"
+                    fill="var(--claude-stone)"
                     fontFamily="inherit"
                   >
                     {display}
@@ -332,13 +332,13 @@ const MainChart: React.FC<{
               })}
 
               {chartType === 'area' && areaPath && (
-                <path d={areaPath} fill="url(#chartArea)" stroke="#c96442" strokeWidth="1.75" />
+                <path d={areaPath} fill="url(#chartArea)" stroke="var(--terracotta)" strokeWidth="1.75" />
               )}
               {chartType === 'line' && linePath && (
                 <path
                   d={linePath}
                   fill="none"
-                  stroke="#c96442"
+                  stroke="var(--terracotta)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -361,7 +361,7 @@ const MainChart: React.FC<{
                       y={y}
                       width={barWidth}
                       height={barHeight}
-                      fill="#c96442"
+                      fill="var(--terracotta)"
                       rx="2"
                     />
                   );
@@ -376,7 +376,7 @@ const MainChart: React.FC<{
                     cy={p.y}
                     r="3"
                     fill="var(--ivory)"
-                    stroke="#c96442"
+                    stroke="var(--terracotta)"
                     strokeWidth="1.75"
                   />
                 ))}
@@ -397,7 +397,7 @@ const MainChart: React.FC<{
                     y={height - 8}
                     textAnchor="middle"
                     fontSize="10"
-                    fill="#87867f"
+                    fill="var(--claude-stone)"
                     fontFamily="inherit"
                   >
                     {d.shortDate}
@@ -666,7 +666,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
               {/* Donut */}
               <div className="relative w-36 h-36 flex-shrink-0">
                 <svg width="144" height="144" className="transform -rotate-90">
-                  <circle cx="72" cy="72" r="56" fill="none" stroke="#e8e6dc" strokeWidth="12" />
+                  <circle cx="72" cy="72" r="56" fill="none" stroke="var(--sand)" strokeWidth="12" />
                   {(() => {
                     const circumference = 2 * Math.PI * 56;
                     let offset = 0;

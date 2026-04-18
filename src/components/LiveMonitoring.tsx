@@ -83,22 +83,26 @@ const StatusCard: React.FC<{
   colorClass: string;
   subtitle: string;
 }> = ({ title, emoji, value, progress, colorClass, subtitle }) => (
-  <Card className="bg-neutral-800/50 border-neutral-700">
+  <Card className="bg-[var(--sand)]/50 border-[var(--cream)]">
     <CardContent className="p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-neutral-400">{title}</span>
+        <span className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+          {title}
+        </span>
         <span className="text-lg">{emoji}</span>
       </div>
       <div className="text-2xl font-bold mb-2" style={{ color: 'var(--claude-black)' }}>
         {value}
       </div>
-      <div className="w-full bg-neutral-800 rounded-full h-3 mb-2">
+      <div className="w-full rounded-full h-3 mb-2" style={{ background: 'var(--cream)' }}>
         <div
           className={`h-3 rounded-full bg-gradient-to-r ${colorClass} transition-all duration-1000`}
           style={{ width: `${progress}%` }}
         />
       </div>
-      <div className="text-xs text-neutral-400">{subtitle}</div>
+      <div className="text-xs" style={{ color: 'var(--claude-stone)' }}>
+        {subtitle}
+      </div>
     </CardContent>
   </Card>
 );
@@ -199,8 +203,15 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold text-gradient mb-1">Live Monitoring</h2>
-              <p className="text-sm text-neutral-400">Real-time terminal-style usage tracking</p>
+              <h2
+                className="text-xl font-bold mb-1 font-serif"
+                style={{ color: 'var(--claude-black)' }}
+              >
+                Live Monitoring
+              </h2>
+              <p className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                Real-time terminal-style usage tracking
+              </p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -209,7 +220,9 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
                   <div
                     className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}
                   />
-                  <span className="text-xs text-neutral-300">{isLiveMode ? 'LIVE' : 'PAUSED'}</span>
+                  <span className="text-xs" style={{ color: 'var(--claude-olive)' }}>
+                    {isLiveMode ? 'LIVE' : 'PAUSED'}
+                  </span>
                 </div>
               </div>
 
@@ -267,7 +280,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
               </div>
             </div>
 
-            <div className="text-xs text-neutral-400">
+            <div className="text-xs" style={{ color: 'var(--claude-stone)' }}>
               Last update: {lastUpdate.toLocaleTimeString()}
             </div>
           </div>
@@ -321,8 +334,10 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
               <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {formatNumber(stats.burnRate)}
               </div>
-              <div className="text-sm text-neutral-400">Tokens/Hour</div>
-              <div className="text-xs text-neutral-500 mt-1">
+              <div className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                Tokens/Hour
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
                 🔥 {stats.burnRate > 1000 ? 'High' : stats.burnRate > 500 ? 'Moderate' : 'Normal'}
               </div>
             </div>
@@ -331,8 +346,12 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
               <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {stats.currentPlan}
               </div>
-              <div className="text-sm text-neutral-400">Current Plan</div>
-              <div className="text-xs text-neutral-500 mt-1">📊 Auto-detected</div>
+              <div className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                Current Plan
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
+                📊 Auto-detected
+              </div>
             </div>
 
             <div className="text-center">
@@ -343,8 +362,10 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
                     ? '📉'
                     : '➡️'}
               </div>
-              <div className="text-sm text-neutral-400">Trend</div>
-              <div className="text-xs text-neutral-500 mt-1">
+              <div className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                Trend
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
                 {stats.velocity?.trend || 'stable'}
               </div>
             </div>
@@ -353,8 +374,12 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
               <div className="text-2xl font-bold mb-1" style={{ color: 'var(--claude-black)' }}>
                 {stats.prediction?.confidence || 0}%
               </div>
-              <div className="text-sm text-neutral-400">Confidence</div>
-              <div className="text-xs text-neutral-500 mt-1">🎯 Prediction</div>
+              <div className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                Confidence
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
+                🎯 Prediction
+              </div>
             </div>
           </div>
         </CardContent>

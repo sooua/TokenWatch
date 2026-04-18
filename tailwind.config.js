@@ -23,41 +23,67 @@ export default {
         overlay: '998',
       },
       colors: {
-        // Claude / Anthropic warm design system
-        parchment: '#f5f4ed',
-        ivory: '#faf9f5',
-        sand: '#e8e6dc',
-        cream: '#f0eee6',
+        // Claude / Anthropic warm design system. Every token resolves to a
+        // CSS variable defined in src/styles/index.css (`:root` = light,
+        // `.dark` = dark override) so every existing `bg-parchment`,
+        // `text-claude-black`, `border-cream` etc. flips automatically when
+        // the theme switches.
+        parchment: 'var(--parchment)',
+        ivory: 'var(--ivory)',
+        sand: 'var(--sand)',
+        cream: 'var(--cream)',
         terracotta: {
-          DEFAULT: '#c96442',
-          light: '#d97757',
-          dark: '#b0533a',
+          DEFAULT: 'var(--terracotta)',
+          light: 'var(--terracotta-light)',
+          dark: 'var(--terracotta-dark)',
         },
         claude: {
-          black: '#141413',
-          dark: '#30302e',
-          charcoal: '#3d3d3a',
-          warm: '#4d4c48',
-          olive: '#5e5d59',
-          stone: '#87867f',
-          silver: '#b0aea5',
+          black: 'var(--claude-black)',
+          dark: 'var(--claude-dark)',
+          charcoal: 'var(--claude-charcoal)',
+          warm: 'var(--claude-warm)',
+          olive: 'var(--claude-olive)',
+          stone: 'var(--claude-stone)',
+          silver: 'var(--claude-silver)',
         },
         ring: {
-          warm: '#d1cfc5',
-          deep: '#c2c0b6',
+          warm: 'var(--ring-warm)',
+          deep: 'var(--ring-deep)',
         },
-        // Warm neutrals for per-shade usage
-        'neutral-warm': {
-          50: '#f5f4ed',
-          100: '#f0eee6',
-          200: '#e8e6dc',
-          300: '#d1cfc5',
-          400: '#b0aea5',
-          500: '#87867f',
-          600: '#5e5d59',
-          700: '#4d4c48',
-          800: '#30302e',
-          900: '#141413',
+        // shadcn/ui semantic aliases so primitives like Button, Progress,
+        // Alert, Card etc. use the Claude palette (and therefore flip in
+        // dark mode) without having to touch their internal classes.
+        background: 'var(--parchment)',
+        foreground: 'var(--claude-black)',
+        primary: {
+          DEFAULT: 'var(--terracotta)',
+          foreground: 'var(--ivory)',
+        },
+        secondary: {
+          DEFAULT: 'var(--sand)',
+          foreground: 'var(--claude-black)',
+        },
+        muted: {
+          DEFAULT: 'var(--sand)',
+          foreground: 'var(--claude-olive)',
+        },
+        accent: {
+          DEFAULT: 'var(--sand)',
+          foreground: 'var(--claude-black)',
+        },
+        destructive: {
+          DEFAULT: 'var(--error-crimson)',
+          foreground: 'var(--ivory)',
+        },
+        border: 'var(--cream)',
+        input: 'var(--sand)',
+        card: {
+          DEFAULT: 'var(--ivory)',
+          foreground: 'var(--claude-black)',
+        },
+        popover: {
+          DEFAULT: 'var(--ivory)',
+          foreground: 'var(--claude-black)',
         },
       },
       fontFamily: {

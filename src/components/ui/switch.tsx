@@ -15,7 +15,7 @@ const Switch = React.forwardRef<
       'peer relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      'data-[state=checked]:bg-[#c96442] data-[state=unchecked]:bg-[#d1cfc5]',
+      'data-[state=checked]:bg-[var(--terracotta)] data-[state=unchecked]:bg-[var(--ring-warm)]',
       'shadow-[inset_0_0_0_1px_rgba(20,20,19,0.08)]',
       className
     )}
