@@ -9,6 +9,19 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-04-18
+### Fixed
+- **Update check crashes on GitHub 504** — the releases.atom feed
+  occasionally returns a 5xx / gateway timeout, and a single hiccup
+  used to flash "检查更新失败 504" across the window. Now:
+  - transient errors (5xx, ETIMEDOUT, ECONNRESET, ENOTFOUND, EAI_AGAIN)
+    retry with backoff (0s → 2s → 5s → 15s) before giving up;
+  - automatic checks (the 15 s boot check + every-4 h refresh) are
+    silent on failure — they never paint a banner, only log;
+  - only manual "check now" clicks surface errors, and the copy is
+    friendlier ("GitHub temporarily unavailable — please try again in
+    a moment") instead of raw HTTP response.
+
 ## [0.5.3] — 2026-04-18
 ### Fixed
 - **CI cross-platform install** — `npm ci` failed on `ubuntu-latest`

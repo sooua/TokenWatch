@@ -374,22 +374,56 @@ class TokenWatchApp {
 
     if (enabled) {
       // First check runs shortly after boot so it doesn't compete with
-      // ccusage's cold-start parsing for network bandwidth.
+      // ccusage's cold-start parsing for network bandwidth. Silent so a
+      // GitHub 504 right after launch doesn't greet the user with a red
+      // banner.
       setTimeout(() => {
-        autoUpdater.checkForUpdates().catch((err) => {
-          console.error('Initial update check failed:', err);
-        });
+        void this.runUpdateCheck({ silent: true });
       }, 15_000);
 
       this.autoUpdateTimer = setInterval(
         () => {
-          autoUpdater.checkForUpdates().catch((err) => {
-            console.error('Periodic update check failed:', err);
-          });
+          void this.runUpdateCheck({ silent: true });
         },
         4 * 60 * 60 * 1000 // 4 hours
       );
     }
+  }
+
+  // Transient HTTP errors from GitHub (503 / 504, connection timeouts)
+  // are common on the releases.atom feed; we don't want a single hiccup
+  // to trip the "update check failed" banner. Retry with backoff, and
+  // when triggered by the automatic scheduler (`silent: true`) suppress
+  // the error toast entirely — only manual "check now" clicks surface it.
+  private async runUpdateCheck(opts: { silent: boolean }): Promise<void> {
+    const isTransient = (err: unknown): boolean => {
+      const msg = (err as Error)?.message || String(err);
+      return /\b(5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|network)\b/i.test(msg);
+    };
+
+    const backoffMs = [0, 2_000, 5_000, 15_000];
+    let lastErr: unknown;
+    for (let i = 0; i < backoffMs.length; i++) {
+      if (backoffMs[i] > 0) await new Promise((r) => setTimeout(r, backoffMs[i]));
+      try {
+        await autoUpdater.checkForUpdates();
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.error(
+          `update-check attempt ${i + 1}/${backoffMs.length} failed:`,
+          (err as Error)?.message || err
+        );
+        if (!isTransient(err)) break; // Auth errors etc. won't benefit from retry.
+      }
+    }
+
+    if (opts.silent) return;
+    const msg = (lastErr as Error)?.message || String(lastErr);
+    const friendly = /\b5\d\d\b/.test(msg)
+      ? 'GitHub temporarily unavailable — please try again in a moment.'
+      : msg;
+    this.emitUpdate({ status: 'error', error: friendly });
   }
 
   private emitUpdate(payload: Record<string, unknown>) {
@@ -679,18 +713,15 @@ class TokenWatchApp {
     });
     // Auto-update — renderer can trigger a check, start the download after
     // we've announced an available version, or install what's already
-    // downloaded.
+    // downloaded. GitHub's releases.atom feed occasionally returns 5xx /
+    // times out; the check retries a few times with backoff before
+    // surfacing the error so a single hiccup doesn't flash a red banner.
     ipcMain.handle('update-check', async () => {
       if (!app.isPackaged) {
         this.emitUpdate({ status: 'not-available', info: 'dev build' });
         return;
       }
-      try {
-        await autoUpdater.checkForUpdates();
-      } catch (err) {
-        console.error('update-check failed:', err);
-        this.emitUpdate({ status: 'error', error: (err as Error)?.message || String(err) });
-      }
+      await this.runUpdateCheck({ silent: false });
     });
     ipcMain.handle('update-download', async () => {
       try {
