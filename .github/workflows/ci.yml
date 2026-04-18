@@ -22,8 +22,11 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        # postinstall applies patches/ccusage+*.patch.
-        run: npm ci
+        # `npm install` rather than `npm ci` because sharp's optional Linux
+        # prebuilts (@emnapi/runtime, libvips musl variants) aren't always
+        # captured in a Windows-generated lockfile. postinstall still runs
+        # patch-package against ccusage.
+        run: npm install --no-audit --no-fund
 
       - name: Lint (Biome)
         run: npm run lint

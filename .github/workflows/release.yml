@@ -38,10 +38,11 @@ jobs:
           git config --system core.longpaths true
 
       - name: Install deps
-        # Runs postinstall -> patch-package, applying our local ccusage
-        # performance patches (parallel I/O + skip redundant pre-sort +
-        # LiteLLM pricing disk cache) before compilation.
-        run: npm ci
+        # `npm install` over `npm ci` so cross-platform sharp prebuilts
+        # resolve (lockfile was generated on Windows and doesn't list every
+        # OS-specific optional dep). postinstall applies our local ccusage
+        # performance patches before compilation.
+        run: npm install --no-audit --no-fund
 
       - name: Build renderer + main
         run: npm run build
@@ -89,7 +90,10 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm ci
+        # `npm install` over `npm ci` so cross-platform sharp prebuilts
+        # resolve (lockfile was generated on Windows and doesn't list every
+        # OS-specific optional dep). postinstall applies the ccusage patch.
+        run: npm install --no-audit --no-fund
 
       - name: Build renderer + main
         run: npm run build
@@ -137,7 +141,10 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm ci
+        # `npm install` over `npm ci` so cross-platform sharp prebuilts
+        # resolve (lockfile was generated on Windows and doesn't list every
+        # OS-specific optional dep). postinstall applies the ccusage patch.
+        run: npm install --no-audit --no-fund
 
       - name: Build renderer + main
         run: npm run build
