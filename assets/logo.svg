@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>TokenWatch</title>
+  <!-- V13 Tally Five: four ink vertical strokes crossed by a single
+       terracotta diagonal — the universal counting mark, mapping directly
+       to "tokens accruing". Ink = #141413, terracotta = #c96442. -->
+  <rect x="30" y="18" width="7" height="92" fill="#141413"/>
+  <rect x="49" y="18" width="7" height="92" fill="#141413"/>
+  <rect x="68" y="18" width="7" height="92" fill="#141413"/>
+  <rect x="87" y="18" width="7" height="92" fill="#141413"/>
+  <line x1="22" y1="106" x2="102" y2="22"
+        stroke="#c96442" stroke-width="9" stroke-linecap="round"/>
+</svg>

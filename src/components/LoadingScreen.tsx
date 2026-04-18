@@ -21,14 +21,23 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
       }
     >
       <div className="max-w-sm w-full text-center">
-        {/* Claude wordmark using the brand terracotta circle */}
+        {/* TokenWatch brand mark: V13 Tally Five. */}
         <div className="mb-10 flex justify-center floating">
-          <div
-            className="w-14 h-14 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--terracotta)' }}
-          >
-            <span className="font-serif text-[24px] leading-none text-white">T</span>
-          </div>
+          <svg className="w-16 h-16" viewBox="0 0 128 128" aria-hidden="true">
+            <rect x="30" y="18" width="7" height="92" fill="var(--claude-black)" />
+            <rect x="49" y="18" width="7" height="92" fill="var(--claude-black)" />
+            <rect x="68" y="18" width="7" height="92" fill="var(--claude-black)" />
+            <rect x="87" y="18" width="7" height="92" fill="var(--claude-black)" />
+            <line
+              x1="22"
+              y1="106"
+              x2="102"
+              y2="22"
+              stroke="var(--terracotta)"
+              strokeWidth="9"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
 
         <h1

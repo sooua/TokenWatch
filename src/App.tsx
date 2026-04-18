@@ -660,17 +660,29 @@ const App: React.FC = () => {
             // vertical space on the left. Drag is inherited from <header>.
             className="flex items-start justify-between mb-3"
           >
-            <div className="flex items-center gap-3">
-              {/* TokenWatch brand mark: terracotta disc with serif "T" inside */}
-              <div
-                className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center"
-                style={{ background: 'var(--terracotta)' }}
+            <div className="flex items-center gap-2.5">
+              {/* TokenWatch brand mark: V13 Tally Five (four ink verticals + terracotta diagonal). */}
+              <svg
+                className="w-10 h-10 flex-shrink-0"
+                viewBox="0 0 128 128"
+                aria-hidden="true"
               >
-                <span className="font-serif leading-none text-white" style={{ fontSize: '18px' }}>
-                  T
-                </span>
-              </div>
-              <div>
+                <rect x="30" y="18" width="7" height="92" fill="var(--claude-black)" />
+                <rect x="49" y="18" width="7" height="92" fill="var(--claude-black)" />
+                <rect x="68" y="18" width="7" height="92" fill="var(--claude-black)" />
+                <rect x="87" y="18" width="7" height="92" fill="var(--claude-black)" />
+                <line
+                  x1="22"
+                  y1="106"
+                  x2="102"
+                  y2="22"
+                  stroke="var(--terracotta)"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* Single-line editorial lockup: title · tagline, aligned to the baseline. */}
+              <div className="flex items-baseline gap-2">
                 <h1
                   className="font-serif leading-none"
                   style={{
@@ -678,13 +690,28 @@ const App: React.FC = () => {
                     fontSize: '20px',
                     letterSpacing: '-0.005em',
                     fontWeight: 500,
+                    margin: 0,
                   }}
                 >
                   {t('app.title')}
                 </h1>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    color: 'var(--claude-stone)',
+                    fontSize: '13px',
+                    lineHeight: 1,
+                  }}
+                >
+                  ·
+                </span>
                 <p
-                  className="mt-1 text-[11px]"
-                  style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+                  className="text-[12px] leading-none"
+                  style={{
+                    color: 'var(--claude-olive)',
+                    letterSpacing: '0.01em',
+                    margin: 0,
+                  }}
                 >
                   {t('app.tagline')}
                 </p>

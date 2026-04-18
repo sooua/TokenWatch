@@ -1,6 +1,6 @@
 {
   "name": "tokenwatch",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TokenWatch — a warm, editorial tray app for real-time Claude Code usage tracking on Windows and macOS",
   "main": "dist/main.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "make-ico": "node scripts/make-ico.mjs",
+    "make-icons": "node scripts/make-icons.mjs",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format --write ./src",
@@ -50,6 +51,7 @@
     "patch-package": "^8.0.1",
     "png-to-ico": "^3.0.1",
     "postcss-loader": "^8.2.0",
+    "sharp": "^0.34.5",
     "style-loader": "^4.0.0",
     "tailwindcss": "^3.4.17",
     "ts-loader": "^9.5.4",
