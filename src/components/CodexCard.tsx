@@ -86,9 +86,7 @@ const WindowBar: React.FC<{
             }}
           >
             {pct.toFixed(1)}
-            <span style={{ color: 'var(--claude-olive)', fontSize: '14px', marginLeft: 2 }}>
-              %
-            </span>
+            <span style={{ color: 'var(--claude-olive)', fontSize: '14px', marginLeft: 2 }}>%</span>
           </div>
         </div>
         <div className="text-right">
@@ -103,10 +101,7 @@ const WindowBar: React.FC<{
           </div>
         </div>
       </div>
-      <div
-        className="h-[6px] rounded-full overflow-hidden"
-        style={{ background: 'var(--sand)' }}
-      >
+      <div className="h-[6px] rounded-full overflow-hidden" style={{ background: 'var(--sand)' }}>
         <div
           className="h-full transition-all duration-700"
           style={{
@@ -245,7 +240,11 @@ export const CodexCard: React.FC = () => {
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              <Box className="w-3.5 h-3.5" strokeWidth={1.75} style={{ color: 'var(--claude-olive)' }} />
+              <Box
+                className="w-3.5 h-3.5"
+                strokeWidth={1.75}
+                style={{ color: 'var(--claude-olive)' }}
+              />
               {stats.sessionsSeen}
             </div>
           </div>
