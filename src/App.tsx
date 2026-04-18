@@ -662,11 +662,7 @@ const App: React.FC = () => {
           >
             <div className="flex items-center gap-2.5">
               {/* TokenWatch brand mark: V13 Tally Five (four ink verticals + terracotta diagonal). */}
-              <svg
-                className="w-10 h-10 flex-shrink-0"
-                viewBox="0 0 128 128"
-                aria-hidden="true"
-              >
+              <svg className="w-10 h-10 flex-shrink-0" viewBox="0 0 128 128" aria-hidden="true">
                 <rect x="30" y="18" width="7" height="92" fill="var(--claude-black)" />
                 <rect x="49" y="18" width="7" height="92" fill="var(--claude-black)" />
                 <rect x="68" y="18" width="7" height="92" fill="var(--claude-black)" />
