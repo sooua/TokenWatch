@@ -241,6 +241,7 @@ export const en = {
     checkNow: 'Check for updates now',
     checking: 'Checking for updates…',
     upToDate: 'You are on the latest version',
+    currentVersion: 'Currently installed version',
   },
 };
 

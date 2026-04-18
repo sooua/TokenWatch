@@ -445,7 +445,11 @@ class TokenWatchApp {
     const friendly = /\b5\d\d\b/.test(msg)
       ? 'GitHub temporarily unavailable — please try again in a moment.'
       : msg;
-    this.emitUpdate({ status: 'error', error: friendly });
+    // `source: 'check'` tells the renderer this failure came from a
+    // manual "check now" click — UpdateBanner hides these because the
+    // SettingsPanel button flow already surfaces them as a toast. Only
+    // download/install failures paint the persistent banner.
+    this.emitUpdate({ status: 'error', error: friendly, source: 'check' });
   }
 
   private emitUpdate(payload: Record<string, unknown>) {
@@ -738,6 +742,7 @@ class TokenWatchApp {
     // downloaded. GitHub's releases.atom feed occasionally returns 5xx /
     // times out; the check retries a few times with backoff before
     // surfacing the error so a single hiccup doesn't flash a red banner.
+    ipcMain.handle('get-app-version', () => app.getVersion());
     ipcMain.handle('update-check', async () => {
       if (!app.isPackaged) {
         this.emitUpdate({ status: 'not-available', info: 'dev build' });

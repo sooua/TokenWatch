@@ -46,6 +46,7 @@ const electronAPI = {
   removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) =>
     ipcRenderer.removeListener('mini-hud-content-changed', listener),
   // Auto-update
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   updateCheck: () => ipcRenderer.invoke('update-check'),
   updateDownload: () => ipcRenderer.invoke('update-download'),
   updateInstall: () => ipcRenderer.invoke('update-install'),

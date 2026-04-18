@@ -21,6 +21,11 @@ interface UpdatePayload {
   transferred?: number;
   total?: number;
   releaseNotes?: string;
+  // Marks where a failure originated. `'check'` failures are handled by
+  // the SettingsPanel "check now" toast flow; the banner hides them to
+  // avoid doubling up on the same message. Download/install errors
+  // omit this field and still paint the persistent banner.
+  source?: 'check' | 'download' | 'install';
 }
 
 // A thin Claude-styled banner that appears when an update is available.
@@ -46,13 +51,15 @@ export const UpdateBanner: React.FC = () => {
     };
   }, []);
 
-  // Only render for states that matter to the user.
+  // Only render for states that matter to the user. A check-time error
+  // (e.g. 504 from the manual "check now" button) is surfaced as a toast
+  // in SettingsPanel instead — rendering it here too would double up.
   const visible =
     !dismissed &&
     (payload.status === 'available' ||
       payload.status === 'downloading' ||
       payload.status === 'downloaded' ||
-      payload.status === 'error');
+      (payload.status === 'error' && payload.source !== 'check'));
 
   if (!visible) return null;
 

@@ -9,6 +9,24 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-04-19
+### Added
+- **Installed version readout** next to the "Check for updates now"
+  button in Settings (`TokenWatch vX.Y.Z`), so users can confirm
+  which build they're running without checking `about://` pages or
+  the installer filename. Sourced from `app.getVersion()` via a new
+  `get-app-version` IPC.
+
+### Fixed
+- **Manual check failures no longer double-render as banner + toast.**
+  v0.5.5 suppressed the raw autoUpdater error event during retries,
+  but the retry wrapper's final emit still painted the red banner —
+  and SettingsPanel's check-now toast fired for the same event, so
+  users got the same "GitHub temporarily unavailable" message in two
+  places. Main now marks check-time failures with `source: 'check'`;
+  UpdateBanner filters those out, leaving only the toast. Download
+  and install errors (no `source`) still paint the persistent banner.
+
 ## [0.5.5] — 2026-04-19
 ### Fixed
 - **504 banner still flashing despite v0.5.4's silent auto-check.**

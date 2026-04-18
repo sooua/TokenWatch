@@ -85,6 +85,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const { theme, setTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    window.electronAPI?.getAppVersion?.().then(setAppVersion).catch(() => {});
+  }, []);
 
   // Manual "check for updates now" flow. The button used to fire an IPC and
   // show nothing on the happy path — an update-to-date result was silently
@@ -569,7 +574,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }
               />
             </div>
-            <div className="ml-11">
+            <div className="ml-11 flex items-center gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={handleCheckNow}
@@ -589,6 +594,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               >
                 {isCheckingUpdate ? t('update.checking') : t('update.checkNow')}
               </button>
+              {appVersion && (
+                <span
+                  className="text-[12px] font-mono"
+                  style={{
+                    color: 'var(--claude-stone)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                  title={t('update.currentVersion')}
+                >
+                  TokenWatch&nbsp;v{appVersion}
+                </span>
+              )}
             </div>
           </div>
         </CardContent>

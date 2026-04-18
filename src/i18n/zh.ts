@@ -227,5 +227,6 @@ export const zh: Translations = {
     checkNow: '立即检查更新',
     checking: '正在检查更新…',
     upToDate: '已是最新版本',
+    currentVersion: '当前安装版本',
   },
 };

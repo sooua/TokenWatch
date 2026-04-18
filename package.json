@@ -1,6 +1,6 @@
 {
   "name": "tokenwatch",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "TokenWatch — a warm, editorial tray app for real-time Claude Code usage tracking on Windows and macOS",
   "main": "dist/main.js",
   "scripts": {

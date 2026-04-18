@@ -41,6 +41,7 @@ export interface ElectronAPI {
     callback: (content: string) => void
   ) => (...args: unknown[]) => void;
   removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) => void;
+  getAppVersion: () => Promise<string>;
   updateCheck: () => Promise<void>;
   updateDownload: () => Promise<void>;
   updateInstall: () => Promise<void>;
