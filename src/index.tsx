@@ -17,8 +17,13 @@ const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 
 root.render(
   <React.StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="tokenwatch-theme">
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      storageKey="tokenwatch-theme"
+    >
       {isMiniHud ? <MiniHud /> : <App />}
     </ThemeProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

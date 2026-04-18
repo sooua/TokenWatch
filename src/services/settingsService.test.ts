@@ -90,7 +90,7 @@ describe('SettingsService', () => {
     fs.writeFileSync(
       path.join(tokenwatchDir, 'settings.json'),
       JSON.stringify({ plan: 'Pro' }),
-      'utf8',
+      'utf8'
     );
 
     const svc = new SettingsService();
