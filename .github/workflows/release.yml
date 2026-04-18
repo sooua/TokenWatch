@@ -1,6 +1,7 @@
-name: Release (Windows)
+name: Release
 
-# Push a tag like `v0.1.0` to build and publish a Windows release.
+# Push a tag like `v0.1.0` to build and publish a cross-platform release
+# (Windows NSIS + portable, macOS dmg x64/arm64, Linux AppImage).
 # Can also be run manually from the Actions tab for dry runs.
 on:
   push:
@@ -73,4 +74,93 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Package macOS dmg (x64 + arm64)
+        env:
+          # Unsigned binaries — skip automatic cert discovery. Users will
+          # see a Gatekeeper warning; that's acceptable for an open-source
+          # hobby release.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenwatch-macos-${{ github.sha }}
+          path: |
+            release/TokenWatch-*.dmg
+            release/latest-mac.yml
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/TokenWatch-*.dmg
+            release/latest-mac.yml
+          draft: false
+          prerelease: false
+          # generate_release_notes only needs to run on one job — the
+          # windows job handles it; here we just append files.
+          fail_on_unmatched_files: true
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Package Linux AppImage
+        run: npm run dist:linux
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenwatch-linux-${{ github.sha }}
+          path: |
+            release/TokenWatch-*.AppImage
+            release/latest-linux.yml
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/TokenWatch-*.AppImage
+            release/latest-linux.yml
+          draft: false
+          prerelease: false
           fail_on_unmatched_files: true

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import png2icons from 'png2icons';
 import pngToIco from 'png-to-ico';
 import sharp from 'sharp';
 
@@ -12,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const iconset = path.join(root, 'assets', 'icon.iconset');
 const outIco = path.join(root, 'assets', 'icon.ico');
+const outIcns = path.join(root, 'assets', 'icon.icns');
+const outLinuxPng = path.join(root, 'assets', 'icon.png');
 const outTrayPng = path.join(root, 'assets', 'tray.png');
 const outTrayIco = path.join(root, 'assets', 'tray.ico');
 
@@ -135,6 +138,20 @@ async function main() {
   const trayPngBuf = await fs.readFile(path.join(iconset, 'icon_32x32.png'));
   await fs.writeFile(outTrayPng, trayPngBuf);
   console.log(`Wrote ${outTrayPng}`);
+
+  // macOS .icns — derived from the 1024×1024 master PNG. png2icons bakes
+  // in every size Finder / Dock needs. Pure JS, no native toolchain, so
+  // this runs the same on Windows / Linux CI as it would on macOS.
+  const masterPng = await fs.readFile(path.join(iconset, 'icon_1024x1024.png'));
+  const icnsBuf = png2icons.createICNS(masterPng, png2icons.BILINEAR, 0);
+  if (!icnsBuf) throw new Error('png2icons.createICNS returned null');
+  await fs.writeFile(outIcns, icnsBuf);
+  console.log(`Wrote ${outIcns} (${icnsBuf.length} bytes)`);
+
+  // Linux AppImage icon — electron-builder expands a single high-res PNG
+  // into the required freedesktop hicolor sizes at packaging time.
+  await fs.writeFile(outLinuxPng, masterPng);
+  console.log(`Wrote ${outLinuxPng} (${masterPng.length} bytes)`);
 }
 
 main().catch((err) => {
