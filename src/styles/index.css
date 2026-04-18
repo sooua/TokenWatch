@@ -87,6 +87,62 @@
   --transition-normal: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/*
+ * Dark theme — warm ink tones, not cold neon. Flips the lightness of
+ * every Claude palette token while keeping the yellow-brown undertone
+ * so the overall feel is "library at dusk" rather than "terminal at
+ * night". Triggered by next-themes via a `.dark` class on <html>.
+ */
+.dark {
+  --parchment: #1a1917;
+  --ivory: #1f1e1b;
+  --sand: #2a2825;
+  --cream: #252320;
+
+  --terracotta: #d97757;
+  --terracotta-light: #e08770;
+  --terracotta-dark: #c96442;
+
+  --claude-black: #faf9f5;
+  --claude-dark: #e8e6dc;
+  --claude-charcoal: #d4d2c9;
+  --claude-warm: #b0aea5;
+  --claude-olive: #9e9c94;
+  --claude-stone: #7a7870;
+  --claude-silver: #5a5852;
+
+  --ring-warm: #3a3835;
+  --ring-deep: #45433f;
+
+  --focus-blue: #5aa9f0;
+  --error-crimson: #d97563;
+
+  /* Semantic aliases re-point at the flipped palette. */
+  --color-bg: var(--parchment);
+  --color-surface: var(--ivory);
+  --color-surface-muted: var(--sand);
+  --color-border: var(--cream);
+  --color-border-strong: var(--sand);
+  --color-text: var(--claude-black);
+  --color-text-secondary: var(--claude-olive);
+  --color-text-tertiary: var(--claude-stone);
+  --color-primary: var(--terracotta);
+  --color-primary-light: var(--terracotta-light);
+  --color-success: #7a9b5f;
+  --color-success-light: #8bab70;
+  --color-warning: var(--terracotta);
+  --color-warning-light: var(--terracotta-light);
+  --color-error: var(--error-crimson);
+  --color-error-light: #e08a7e;
+
+  /* Ring shadows need a warm ash at dusk, not a light ring. */
+  --shadow-ring: 0 0 0 1px var(--ring-warm);
+  --shadow-ring-deep: 0 0 0 1px var(--ring-deep);
+  --shadow-whisper: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-whisper-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 0 3px rgba(217, 119, 87, 0.2);
+}
+
 * {
   box-sizing: border-box;
 }

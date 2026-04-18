@@ -7,9 +7,11 @@ import {
   Gauge,
   Globe,
   Languages,
+  Moon,
   PictureInPicture,
   Rocket,
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -77,6 +79,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   stats,
 }) => {
   const { t } = useTranslation();
+  // next-themes persists to `tokenwatch-theme` in localStorage and handles
+  // the system-preference media query for us.
+  const { theme, setTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const handlePreferenceChange = (key: string, value: boolean | number | string) => {
@@ -220,6 +225,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <SelectItem value="auto">{t('settings.languageAuto')}</SelectItem>
                   <SelectItem value="en">{t('settings.languageEn')}</SelectItem>
                   <SelectItem value="zh">{t('settings.languageZh')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Theme */}
+          <div className="space-y-3">
+            <SectionHeader
+              icon={<Moon className="w-4 h-4" strokeWidth={1.75} />}
+              title={t('settings.theme')}
+              description={t('settings.themeDesc')}
+            />
+            <div className="ml-11">
+              <Select value={theme || 'system'} onValueChange={(value) => setTheme(value)}>
+                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">{t('settings.themeSystem')}</SelectItem>
+                  <SelectItem value="light">{t('settings.themeLight')}</SelectItem>
+                  <SelectItem value="dark">{t('settings.themeDark')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

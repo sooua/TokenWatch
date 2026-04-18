@@ -13,6 +13,12 @@ import type {
   UserConfiguration,
   VelocityInfo,
 } from '../types/usage.js';
+import {
+  calculateBurnRate as utilCalculateBurnRate,
+  detectPlan as utilDetectPlan,
+  getTokenLimit as utilGetTokenLimit,
+  toISOStringLocal as utilToISOStringLocal,
+} from './ccusage-utils.js';
 import { ResetTimeService } from './resetTimeService.js';
 import { SessionTracker } from './sessionTracker.js';
 
@@ -192,24 +198,7 @@ export class CCUsageService {
   }
 
   private toISOStringLocal(date: Date): string {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
-    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
-
-    // Calculate timezone offset
-    const timezoneOffsetMinutes = date.getTimezoneOffset();
-    const offsetSign = timezoneOffsetMinutes > 0 ? '-' : '+';
-    const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60)
-      .toString()
-      .padStart(2, '0');
-    const offsetMinutes = (Math.abs(timezoneOffsetMinutes) % 60).toString().padStart(2, '0');
-    const timezoneOffsetString = `${offsetSign}${offsetHours}:${offsetMinutes}`;
-
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}${timezoneOffsetString}`;
+    return utilToISOStringLocal(date);
   }
 
   updateConfiguration(config: Partial<UserConfiguration>): void {
@@ -830,23 +819,11 @@ export class CCUsageService {
   }
 
   private detectPlan(totalTokens: number): 'Pro' | 'Max5' | 'Max20' | 'Custom' {
-    if (totalTokens <= 7000) return 'Pro';
-    if (totalTokens <= 35000) return 'Max5';
-    if (totalTokens <= 140000) return 'Max20';
-    return 'Custom';
+    return utilDetectPlan(totalTokens);
   }
 
   private getTokenLimit(plan: string): number {
-    switch (plan) {
-      case 'Pro':
-        return 7000;
-      case 'Max5':
-        return 35000;
-      case 'Max20':
-        return 140000;
-      default:
-        return 500000; // Custom high limit
-    }
+    return utilGetTokenLimit(plan);
   }
 
   private calculatePredictedDepletion(
@@ -995,19 +972,7 @@ export class CCUsageService {
    * Calculate burn rate from daily data (for legacy compatibility)
    */
   private calculateBurnRate(data: UsageDataItem[]): number {
-    const last24Hours = data.filter((item) => {
-      const itemDate = new Date(item.date);
-      const now = new Date();
-      const hoursDiff = (now.getTime() - itemDate.getTime()) / (1000 * 60 * 60);
-      return hoursDiff <= 24;
-    });
-
-    const totalTokens = last24Hours.reduce((sum, item) => {
-      return (
-        sum + (item.inputTokens || 0) + (item.outputTokens || 0) + (item.cacheCreationTokens || 0)
-      );
-    }, 0);
-    return Math.round(totalTokens / 24); // tokens per hour
+    return utilCalculateBurnRate(data);
   }
 
   /**

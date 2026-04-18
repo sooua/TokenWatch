@@ -3,8 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4)](#installation)
 [![macOS](https://img.shields.io/badge/macOS-10.15%2B-blue)](#installation)
+[![Linux](https://img.shields.io/badge/Linux-AppImage-FCC624)](#installation)
 
-A warm, editorial tray app that keeps a quiet eye on your Claude Code token usage. Lives in the system tray on Windows / menu bar on macOS, shows real-time consumption, cost, and burn rate, and stays out of the way the rest of the time.
+A warm, editorial tray app that keeps a quiet eye on your Claude Code token usage. Lives in the system tray on Windows, menu bar on macOS, or indicator area on Linux; shows real-time consumption, cost, and burn rate, and stays out of the way the rest of the time.
 
 ## Features
 
@@ -23,18 +24,36 @@ A warm, editorial tray app that keeps a quiet eye on your Claude Code token usag
 
 ## Installation
 
+Download the latest release from [GitHub Releases](https://github.com/sooua/TokenWatch/releases/latest).
+
 ### Windows
 
-Download the latest release from GitHub Releases:
 - **Installer**: `TokenWatch-Setup-<version>-x64.exe` (NSIS, custom install directory, desktop & start-menu shortcuts)
 - **Portable**: `TokenWatch-Portable-<version>-x64.exe` (no installation required)
 
-Windows 10 / 11 (x64).
+Windows 10 / 11 (x64). Binaries are unsigned — SmartScreen will prompt on first launch; click **More info → Run anyway**.
 
 ### macOS
 
-- **Apple Silicon**: `TokenWatch-darwin-arm64.dmg`
-- **Intel**: `TokenWatch-darwin-x64.dmg`
+- **Apple Silicon**: `TokenWatch-<version>-arm64.dmg`
+- **Intel**: `TokenWatch-<version>.dmg`
+
+macOS 10.15+. Binaries are unsigned — the first launch needs `System Settings → Privacy & Security → Open Anyway`, or from the terminal:
+
+```bash
+xattr -cr /Applications/TokenWatch.app
+```
+
+### Linux
+
+- **AppImage**: `TokenWatch-<version>.AppImage`
+
+```bash
+chmod +x TokenWatch-*.AppImage
+./TokenWatch-*.AppImage
+```
+
+AppImages are self-contained and portable — no system-wide install, no package manager required.
 
 ### Build from source
 
@@ -49,9 +68,10 @@ npm start
 Packaging:
 
 ```bash
-npm run dist:mac   # macOS DMG
-npm run dist:win   # Windows NSIS installer + portable exe
-npm run dist       # Current platform (auto)
+npm run dist:mac     # macOS DMG (x64 + arm64 universal)
+npm run dist:win     # Windows NSIS installer + portable exe
+npm run dist:linux   # Linux AppImage
+npm run dist         # Current platform (auto)
 ```
 
 > **Note**: `npm install` runs `patch-package` on `postinstall` to apply a small local patch to ccusage (`patches/ccusage+18.0.8.patch`). The patch:

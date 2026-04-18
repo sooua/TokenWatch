@@ -1,3 +1,4 @@
+import { ThemeProvider } from 'next-themes';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -14,4 +15,10 @@ const isMiniHud = viewParam === 'minihud';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 
-root.render(<React.StrictMode>{isMiniHud ? <MiniHud /> : <App />}</React.StrictMode>);
+root.render(
+  <React.StrictMode>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="tokenwatch-theme">
+      {isMiniHud ? <MiniHud /> : <App />}
+    </ThemeProvider>
+  </React.StrictMode>,
+);
