@@ -9,6 +9,17 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-04-18
+### Fixed
+- **CI cross-platform install** — `npm ci` failed on `ubuntu-latest`
+  / `macos-latest` after sharp + png2icons were added on Windows;
+  the lockfile didn't list every platform's optional prebuilts (most
+  visibly `@emnapi/runtime` for Linux glibc/musl). CI + Release
+  workflows now use `npm install --no-audit --no-fund` so each runner
+  pulls its own platform binaries. v0.5.2 didn't actually ship
+  installers because of this; v0.5.3 carries the same payload plus
+  the CI fix.
+
 ## [0.5.2] — 2026-04-18
 ### Fixed
 - **Dark mode end-to-end coverage.** v0.5.1 swept component-level
