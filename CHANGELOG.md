@@ -9,6 +9,21 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-04-19
+### Fixed
+- **504 banner still flashing despite v0.5.4's silent auto-check.**
+  electron-updater's own `autoUpdater.on('error', …)` listener was
+  registered alongside our retry wrapper and fired the red banner
+  *before* the wrapper could decide whether to surface the failure.
+  Each retry attempt also re-fired the event, so a boot-time 504
+  could paint the banner up to four times in sequence.
+  Now a `updateCheckInFlight` flag gates the global error listener
+  during checks: while true, error events are logged only; the retry
+  wrapper owns the emit decision (silent auto-check → nothing;
+  manual check → friendly message after all retries fail). Download
+  and install errors still surface normally — the flag only covers
+  `checkForUpdates` calls.
+
 ## [0.5.4] — 2026-04-18
 ### Fixed
 - **Update check crashes on GitHub 504** — the releases.atom feed

@@ -92,6 +92,10 @@ class TokenWatchApp {
   private miniHudSavePositionTimer: NodeJS.Timeout | null = null;
   private autoUpdateTimer: NodeJS.Timeout | null = null;
   private autoUpdateInitialized = false;
+  // While a check is running through runUpdateCheck(), we swallow
+  // autoUpdater's own 'error' events so they don't fire the red banner
+  // before our retry wrapper decides whether to surface the failure.
+  private updateCheckInFlight = false;
 
   constructor() {
     this.usageService = CCUsageService.getInstance();
@@ -358,9 +362,22 @@ class TokenWatchApp {
       autoUpdater.on('update-downloaded', (info) =>
         this.emitUpdate({ status: 'downloaded', version: info?.version })
       );
-      autoUpdater.on('error', (err) =>
-        this.emitUpdate({ status: 'error', error: err?.message || String(err) })
-      );
+      autoUpdater.on('error', (err) => {
+        // While a runUpdateCheck() loop is running, all failures are
+        // handled by the retry wrapper. Surfacing them here would flash
+        // the banner on every attempt (4× for the default backoff) and
+        // defeat the "silent auto-check" guarantee. Download/install
+        // errors still fall through because updateCheckInFlight is only
+        // set around checkForUpdates calls.
+        if (this.updateCheckInFlight) {
+          console.error(
+            'autoUpdater error during check (deferring to retry wrapper):',
+            err?.message || err
+          );
+          return;
+        }
+        this.emitUpdate({ status: 'error', error: err?.message || String(err) });
+      });
 
       this.autoUpdateInitialized = true;
     }
@@ -401,21 +418,26 @@ class TokenWatchApp {
       return /\b(5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|network)\b/i.test(msg);
     };
 
+    this.updateCheckInFlight = true;
     const backoffMs = [0, 2_000, 5_000, 15_000];
     let lastErr: unknown;
-    for (let i = 0; i < backoffMs.length; i++) {
-      if (backoffMs[i] > 0) await new Promise((r) => setTimeout(r, backoffMs[i]));
-      try {
-        await autoUpdater.checkForUpdates();
-        return;
-      } catch (err) {
-        lastErr = err;
-        console.error(
-          `update-check attempt ${i + 1}/${backoffMs.length} failed:`,
-          (err as Error)?.message || err
-        );
-        if (!isTransient(err)) break; // Auth errors etc. won't benefit from retry.
+    try {
+      for (let i = 0; i < backoffMs.length; i++) {
+        if (backoffMs[i] > 0) await new Promise((r) => setTimeout(r, backoffMs[i]));
+        try {
+          await autoUpdater.checkForUpdates();
+          return;
+        } catch (err) {
+          lastErr = err;
+          console.error(
+            `update-check attempt ${i + 1}/${backoffMs.length} failed:`,
+            (err as Error)?.message || err
+          );
+          if (!isTransient(err)) break; // Auth errors won't benefit from retry.
+        }
       }
+    } finally {
+      this.updateCheckInFlight = false;
     }
 
     if (opts.silent) return;
