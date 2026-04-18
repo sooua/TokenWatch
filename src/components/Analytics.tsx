@@ -332,7 +332,12 @@ const MainChart: React.FC<{
               })}
 
               {chartType === 'area' && areaPath && (
-                <path d={areaPath} fill="url(#chartArea)" stroke="var(--terracotta)" strokeWidth="1.75" />
+                <path
+                  d={areaPath}
+                  fill="url(#chartArea)"
+                  stroke="var(--terracotta)"
+                  strokeWidth="1.75"
+                />
               )}
               {chartType === 'line' && linePath && (
                 <path
@@ -666,7 +671,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
               {/* Donut */}
               <div className="relative w-36 h-36 flex-shrink-0">
                 <svg width="144" height="144" className="transform -rotate-90">
-                  <circle cx="72" cy="72" r="56" fill="none" stroke="var(--sand)" strokeWidth="12" />
+                  <circle
+                    cx="72"
+                    cy="72"
+                    r="56"
+                    fill="none"
+                    stroke="var(--sand)"
+                    strokeWidth="12"
+                  />
                   {(() => {
                     const circumference = 2 * Math.PI * 56;
                     let offset = 0;

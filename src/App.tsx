@@ -587,10 +587,7 @@ const App: React.FC = () => {
                 />
               </svg>
             </div>
-            <h2
-              className="text-xl font-bold mb-4"
-              style={{ color: 'var(--claude-black)' }}
-            >
+            <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--claude-black)' }}>
               {t('app.connectionError')}
             </h2>
             <p className="mb-6" style={{ color: 'var(--claude-olive)' }}>
