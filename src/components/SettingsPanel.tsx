@@ -88,7 +88,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
-    window.electronAPI?.getAppVersion?.().then(setAppVersion).catch(() => {});
+    window.electronAPI
+      ?.getAppVersion?.()
+      .then(setAppVersion)
+      .catch(() => {});
   }, []);
 
   // Manual "check for updates now" flow. The button used to fire an IPC and
