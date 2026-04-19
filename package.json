@@ -40,7 +40,7 @@
     "tokens"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

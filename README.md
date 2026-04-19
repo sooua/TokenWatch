@@ -1,6 +1,6 @@
 # TokenWatch
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blueviolet)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4)](#installation--%E5%AE%89%E8%A3%85)
 [![macOS](https://img.shields.io/badge/macOS-10.15%2B-blue)](#installation--%E5%AE%89%E8%A3%85)
 [![Linux](https://img.shields.io/badge/Linux-AppImage-FCC624)](#installation--%E5%AE%89%E8%A3%85)
@@ -182,7 +182,9 @@ Nothing is sent anywhere else — the only network call is ccusage's pricing fet
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — free for personal, research, educational, and other noncommercial use. Commercial use requires a separate license. See [LICENSE](LICENSE).
+
+Portions derived from [CCSeva](https://github.com/Iamshankhadeep/ccseva) remain under their original MIT license; that notice is retained inside [LICENSE](LICENSE).
 
 ## Credits
 
@@ -333,7 +335,9 @@ TokenWatch 在 `~/.tokenwatch/` 下保存少量文件：
 
 ### 许可证
 
-MIT 许可证，详见 [LICENSE](LICENSE)。
+采用 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/)，个人使用、研究、教学及其他非商业用途完全免费；商业用途需另行获得授权。详见 [LICENSE](LICENSE)。
+
+源自 [CCSeva](https://github.com/Iamshankhadeep/ccseva) 的部分仍沿用其原始 MIT 许可，该声明已保留在 [LICENSE](LICENSE) 文件中。
 
 ### 致谢
 
