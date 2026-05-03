@@ -544,7 +544,11 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
   // burnRate was tokens/min (which it isn't anymore — see CCUsageService).
   const burnRateMax = Math.max(stats.tokenLimit / 5, 1);
   const burnTone: 'normal' | 'warning' | 'critical' =
-    stats.burnRate > burnRateMax ? 'critical' : stats.burnRate > burnRateMax / 2 ? 'warning' : 'normal';
+    stats.burnRate > burnRateMax
+      ? 'critical'
+      : stats.burnRate > burnRateMax / 2
+        ? 'warning'
+        : 'normal';
 
   const usageTone: 'normal' | 'warning' | 'critical' =
     stats.percentageUsed >= 90 ? 'critical' : stats.percentageUsed >= 70 ? 'warning' : 'normal';
@@ -829,7 +833,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
                       : t('analytics.toneNormal'),
                 tone: burnTone,
               }}
-              progress={{ pct: Math.min((stats.burnRate / burnRateMax) * 100, 100), tone: burnTone }}
+              progress={{
+                pct: Math.min((stats.burnRate / burnRateMax) * 100, 100),
+                tone: burnTone,
+              }}
             />
             <MetricCard
               icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}

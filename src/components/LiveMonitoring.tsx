@@ -374,8 +374,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
                 Tokens/Hour
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
-                🔥{' '}
-                {(() => {
+                🔥 {(() => {
                   // Plan-relative burn rate label. Was hardcoded 1000/500
                   // when burnRate was tokens/min; now it's tokens/hour.
                   const burnHigh = Math.max(stats.tokenLimit / 5, 1);

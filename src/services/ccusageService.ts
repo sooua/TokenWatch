@@ -561,9 +561,7 @@ export class CCUsageService {
         const ts = (entry.timestamp as Date).getTime?.() ?? new Date(entry.timestamp).getTime();
         if (ts < oneHourAgo) continue;
         totalTokens +=
-          entry.usage.inputTokens +
-          entry.usage.outputTokens +
-          entry.usage.cacheCreationInputTokens;
+          entry.usage.inputTokens + entry.usage.outputTokens + entry.usage.cacheCreationInputTokens;
       }
     }
 
@@ -595,9 +593,7 @@ export class CCUsageService {
 
         // Cache-read tokens excluded — see getTotalTokensFromBlock.
         const entryTokens =
-          entry.usage.inputTokens +
-          entry.usage.outputTokens +
-          entry.usage.cacheCreationInputTokens;
+          entry.usage.inputTokens + entry.usage.outputTokens + entry.usage.cacheCreationInputTokens;
         const entryCost = entry.costUSD ?? 0;
 
         daily.totalTokens += entryTokens;
@@ -647,9 +643,7 @@ export class CCUsageService {
         const ts = (entry.timestamp as Date).getTime?.() ?? new Date(entry.timestamp).getTime();
         if (ts < oneWeekAgo) continue;
         const entryTokens =
-          entry.usage.inputTokens +
-          entry.usage.outputTokens +
-          entry.usage.cacheCreationInputTokens;
+          entry.usage.inputTokens + entry.usage.outputTokens + entry.usage.cacheCreationInputTokens;
         tokens7d += entryTokens;
         if (ts >= oneDayAgo) tokens24h += entryTokens;
       }
@@ -659,8 +653,7 @@ export class CCUsageService {
     const average7d = tokens7d / (7 * 24);
 
     // currentBurnRate is now tokens/hour (see calculateHourlyBurnRate).
-    const trendPercent =
-      average24h > 0 ? ((currentBurnRate - average24h) / average24h) * 100 : 0;
+    const trendPercent = average24h > 0 ? ((currentBurnRate - average24h) / average24h) * 100 : 0;
     let trend: 'increasing' | 'decreasing' | 'stable' = 'stable';
     if (Math.abs(trendPercent) > 15) {
       trend = trendPercent > 0 ? 'increasing' : 'decreasing';
@@ -694,9 +687,7 @@ export class CCUsageService {
         const ts = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
         if (ts.getTime() < oneWeekAgo) continue;
         buckets[ts.getHours()] +=
-          entry.usage.inputTokens +
-          entry.usage.outputTokens +
-          entry.usage.cacheCreationInputTokens;
+          entry.usage.inputTokens + entry.usage.outputTokens + entry.usage.cacheCreationInputTokens;
       }
     }
 

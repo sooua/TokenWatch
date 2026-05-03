@@ -45,8 +45,7 @@ export class NotificationService {
 
     // Apply the cooldown only when the bucket hasn't worsened — don't
     // suppress a critical escalation that arrives 2 min after a warning.
-    const isEscalation =
-      data.status === 'critical' && this.lastWarningLevel !== 'critical';
+    const isEscalation = data.status === 'critical' && this.lastWarningLevel !== 'critical';
     if (!isEscalation && timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
       return;
     }
