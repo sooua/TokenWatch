@@ -9,12 +9,18 @@ export interface UsageDataItem {
   cacheCreationTokens?: number;
 }
 
-// Claude plan thresholds mirror the dashboard's auto-detect logic.
+// Approximate per-5h-window caps for input + output + cacheCreation
+// tokens (cache reads excluded — see CCUsageService.getTotalTokensFromBlock).
+// Anthropic doesn't publish an exact token-based limit; these are
+// community-derived ratios that put a typical Pro user near 100% on a
+// heavy session and a Max20 user comfortably below it. Treat them as a
+// rough indicator rather than ground truth — the authoritative answer
+// comes from Anthropic's response when you actually hit the rate limit.
 export const PLAN_LIMITS = {
-  Pro: 7000,
-  Max5: 35000,
-  Max20: 140000,
-  Custom: 500000,
+  Pro: 220_000,
+  Max5: 1_100_000,
+  Max20: 4_400_000,
+  Custom: 10_000_000,
 } as const;
 
 export type PlanName = 'Pro' | 'Max5' | 'Max20' | 'Custom';

@@ -287,15 +287,17 @@ export class SessionTracker {
   }
 
   /**
-   * Helper method to get total tokens from a block (matches ccusageService pattern)
+   * Helper method to get total tokens from a block. Mirrors
+   * ccusageService.getTotalTokensFromBlock — cache-read tokens excluded so
+   * the session window numbers don't get inflated 10-100× by prompt-cache
+   * hits that don't count toward the user's rate-limit cap.
    */
   private getTotalTokensFromBlock(block: CCUsageBlock): number {
     const counts = block.tokenCounts || {};
     return (
       (counts.inputTokens || 0) +
       (counts.outputTokens || 0) +
-      (counts.cacheCreationInputTokens || 0) +
-      (counts.cacheReadInputTokens || 0)
+      (counts.cacheCreationInputTokens || 0)
     );
   }
 

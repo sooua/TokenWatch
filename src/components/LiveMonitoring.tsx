@@ -110,6 +110,9 @@ const StatusCard: React.FC<{
 interface LiveMonitoringProps {
   stats: UsageStats;
   onRefresh: () => void;
+  preferences?: {
+    plan?: 'auto' | 'Pro' | 'Max5' | 'Max20' | 'Custom';
+  };
 }
 
 interface LogEntry {
@@ -120,7 +123,11 @@ interface LogEntry {
   emoji: string;
 }
 
-export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh }) => {
+export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
+  stats,
+  onRefresh,
+  preferences,
+}) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
@@ -149,49 +156,78 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
     }
   }, [isLiveMode]);
 
-  // Real-time updates every 3 seconds (like Python script)
+  // Refresh interval. The main process polls every 30s and the service
+  // caches for 20s, so a sub-30s interval here just re-renders the cached
+  // value while the "Data refreshed" log lies. Match the upstream cadence.
   useEffect(() => {
     if (!isLiveMode) return;
 
     intervalRef.current = setInterval(() => {
       onRefresh();
       setLastUpdate(new Date());
-      addLogEntry('info', 'Data refreshed', '🔄');
-    }, 3000);
+    }, 30000);
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isLiveMode, onRefresh, addLogEntry]);
+  }, [isLiveMode, onRefresh]);
 
-  // Add status-based log entries
+  // Log a "data refreshed" line only when token usage actually moves —
+  // de-duplicates the previous spam where the 3s interval logged on every
+  // tick whether or not anything changed.
+  const lastTokensUsedRef = useRef<number | null>(null);
   useEffect(() => {
-    const timeUntilReset = stats.resetInfo?.timeUntilReset;
+    if (lastTokensUsedRef.current === null) {
+      lastTokensUsedRef.current = stats.tokensUsed;
+      return;
+    }
+    if (stats.tokensUsed !== lastTokensUsedRef.current) {
+      addLogEntry('info', 'Usage updated', '🔄');
+      lastTokensUsedRef.current = stats.tokensUsed;
+    }
+  }, [stats.tokensUsed, addLogEntry]);
 
-    if (stats.percentageUsed >= 95) {
+  // Status logs — only emit when the bucket changes (normal/high/critical),
+  // so a 89.9 → 90.1 → 89.8 flicker doesn't spam the feed every poll.
+  const lastStatusBucketRef = useRef<'normal' | 'high' | 'critical' | null>(null);
+  useEffect(() => {
+    const bucket: 'normal' | 'high' | 'critical' =
+      stats.percentageUsed >= 95 ? 'critical' : stats.percentageUsed >= 80 ? 'high' : 'normal';
+    if (bucket === lastStatusBucketRef.current) return;
+    lastStatusBucketRef.current = bucket;
+    if (bucket === 'critical') {
       addLogEntry('error', `Critical: ${stats.percentageUsed.toFixed(1)}% usage detected`, '🚨');
-    } else if (stats.percentageUsed >= 80) {
+    } else if (bucket === 'high') {
       addLogEntry('warning', `High usage: ${stats.percentageUsed.toFixed(1)}%`, '⚠️');
     }
+  }, [stats.percentageUsed, addLogEntry]);
 
-    if (timeUntilReset && timeUntilReset < 3600000) {
-      addLogEntry('info', `Reset in ${formatTimeRemaining(timeUntilReset)}`, '⏰');
+  // Reset-imminent log — only fire once per hour-bucket so it doesn't
+  // re-log every 30s during the final hour.
+  const lastResetLogBucketRef = useRef<number | null>(null);
+  useEffect(() => {
+    const timeUntilReset = stats.resetInfo?.timeUntilReset;
+    if (!timeUntilReset || timeUntilReset >= 3600000) {
+      lastResetLogBucketRef.current = null;
+      return;
     }
-  }, [stats.percentageUsed, stats.resetInfo?.timeUntilReset, addLogEntry]);
+    const bucket = Math.floor(timeUntilReset / (5 * 60 * 1000)); // 5-min buckets
+    if (bucket === lastResetLogBucketRef.current) return;
+    lastResetLogBucketRef.current = bucket;
+    addLogEntry('info', `Reset in ${formatTimeRemaining(timeUntilReset)}`, '⏰');
+  }, [stats.resetInfo?.timeUntilReset, addLogEntry]);
 
   const currentStatus = getUsageStatus(stats.percentageUsed);
   const tokensPercentage = Math.min(stats.percentageUsed, 100);
 
-  // Calculate time progress (assuming reset info exists)
+  // % elapsed of the current Claude session window. cycleDurationMs is the
+  // 5h reset cadence supplied by ResetTimeService — previously hardcoded
+  // here as 24h, which produced a near-zero progress bar.
   const getTimeProgress = (): number => {
-    if (!stats.resetInfo) return 0;
-
-    const totalCycleDuration = 24 * 60 * 60 * 1000;
-    const timeElapsed = totalCycleDuration - stats.resetInfo.timeUntilReset;
-
-    return Math.max(0, Math.min(100, (timeElapsed / totalCycleDuration) * 100));
+    if (!stats.resetInfo || !stats.resetInfo.cycleDurationMs) return 0;
+    return Math.max(0, Math.min(100, stats.resetInfo.percentUntilReset));
   };
 
   const timeProgress = getTimeProgress();
@@ -338,7 +374,15 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
                 Tokens/Hour
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
-                🔥 {stats.burnRate > 1000 ? 'High' : stats.burnRate > 500 ? 'Moderate' : 'Normal'}
+                🔥{' '}
+                {(() => {
+                  // Plan-relative burn rate label. Was hardcoded 1000/500
+                  // when burnRate was tokens/min; now it's tokens/hour.
+                  const burnHigh = Math.max(stats.tokenLimit / 5, 1);
+                  if (stats.burnRate > burnHigh) return 'High';
+                  if (stats.burnRate > burnHigh / 2) return 'Moderate';
+                  return 'Normal';
+                })()}
               </div>
             </div>
 
@@ -350,7 +394,9 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({ stats, onRefresh
                 Current Plan
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--claude-stone)' }}>
-                📊 Auto-detected
+                {!preferences?.plan || preferences.plan === 'auto'
+                  ? '📊 Auto-detected'
+                  : '📌 Manual'}
               </div>
             </div>
 

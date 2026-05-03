@@ -532,11 +532,19 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
 
   const totalWeekTokens = stats.thisWeek.reduce((sum, d) => sum + d.totalTokens, 0);
   const totalWeekCost = stats.thisWeek.reduce((sum, d) => sum + d.totalCost, 0);
-  const avgDailyTokens = totalWeekTokens / 7;
-  const avgDailyCost = totalWeekCost / 7;
+  // Divide by actual day count, not a fixed 7 — on day 1 of using the
+  // app this would otherwise under-state the average by 7×.
+  const dayCount = Math.max(1, stats.thisWeek.length);
+  const avgDailyTokens = totalWeekTokens / dayCount;
+  const avgDailyCost = totalWeekCost / dayCount;
 
+  // Calibrate burn rate against the plan: anything that would deplete the
+  // 5h window is "critical", anything above 50% of that is "warning".
+  // Previously hardcoded 1000/500 tokens/hr — meaningful only when
+  // burnRate was tokens/min (which it isn't anymore — see CCUsageService).
+  const burnRateMax = Math.max(stats.tokenLimit / 5, 1);
   const burnTone: 'normal' | 'warning' | 'critical' =
-    stats.burnRate > 1000 ? 'critical' : stats.burnRate > 500 ? 'warning' : 'normal';
+    stats.burnRate > burnRateMax ? 'critical' : stats.burnRate > burnRateMax / 2 ? 'warning' : 'normal';
 
   const usageTone: 'normal' | 'warning' | 'critical' =
     stats.percentageUsed >= 90 ? 'critical' : stats.percentageUsed >= 70 ? 'warning' : 'normal';
@@ -810,7 +818,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
               value={formatNumber(stats.burnRate)}
               label={t('analytics.burnRateLabel')}
               detail={t('analytics.burnRateDetail', {
-                pct: Math.min((stats.burnRate / 2000) * 100, 100).toFixed(0),
+                pct: Math.min((stats.burnRate / burnRateMax) * 100, 100).toFixed(0),
               })}
               badge={{
                 text:
@@ -821,7 +829,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
                       : t('analytics.toneNormal'),
                 tone: burnTone,
               }}
-              progress={{ pct: Math.min((stats.burnRate / 2000) * 100, 100), tone: burnTone }}
+              progress={{ pct: Math.min((stats.burnRate / burnRateMax) * 100, 100), tone: burnTone }}
             />
             <MetricCard
               icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}

@@ -28,12 +28,7 @@ export class NotificationService {
       return;
     }
 
-    // Only notify if enough time has passed and status has worsened
-    if (timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
-      return;
-    }
-
-    // Check if we should send a notification
+    // Decide what (if anything) to send before deciding whether to throttle.
     let shouldNotify = false;
     let title = '';
     let body = '';
@@ -46,6 +41,14 @@ export class NotificationService {
       shouldNotify = true;
       title = 'TokenWatch: Usage warning';
       body = `You've used ${Math.round(data.percentageUsed)}% of your tokens. Monitor your usage carefully.`;
+    }
+
+    // Apply the cooldown only when the bucket hasn't worsened — don't
+    // suppress a critical escalation that arrives 2 min after a warning.
+    const isEscalation =
+      data.status === 'critical' && this.lastWarningLevel !== 'critical';
+    if (!isEscalation && timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
+      return;
     }
 
     if (shouldNotify) {

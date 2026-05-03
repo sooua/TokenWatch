@@ -2,6 +2,7 @@ import { ArrowDown, ArrowRight, ArrowUp, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PLAN_LIMITS } from '../services/ccusage-utils';
 import type { UsageStats } from '../types/usage';
 
 interface TerminalViewProps {
@@ -46,8 +47,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
       const limit = preferences.customTokenLimit || stats.tokenLimit;
       return `Custom (${formatNumber(limit)})`;
     }
-    const limits = { Pro: '7K', Max5: '35K', Max20: '140K' } as const;
-    return `${selected} (${limits[selected as keyof typeof limits]})`;
+    return `${selected} (${formatNumber(PLAN_LIMITS[selected as keyof typeof PLAN_LIMITS])})`;
   };
 
   const statusTone =
@@ -66,10 +66,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
       <ArrowRight className="inline w-3 h-3 -mt-0.5" strokeWidth={2} />
     );
 
+  // Mirror the service's trend bucketing (only ±15% counts as a trend) so
+  // the colour and the trend word never disagree. Previously a 3% drift
+  // would render a red arrow next to a "stable" label.
   const velocityColor =
-    stats.velocity && stats.velocity.trendPercent > 0
+    stats.velocity?.trend === 'increasing'
       ? '#d97757'
-      : stats.velocity && stats.velocity.trendPercent < 0
+      : stats.velocity?.trend === 'decreasing'
         ? '#7a9b5f'
         : '#b0aea5';
 

@@ -17,6 +17,7 @@ import {
   calculateBurnRate as utilCalculateBurnRate,
   detectPlan as utilDetectPlan,
   getTokenLimit as utilGetTokenLimit,
+  PLAN_LIMITS,
   toISOStringLocal as utilToISOStringLocal,
 } from './ccusage-utils.js';
 import { ResetTimeService } from './resetTimeService.js';
@@ -108,7 +109,7 @@ export class CCUsageService {
   private currentPlan: 'Pro' | 'Max5' | 'Max20' | 'Custom' = 'Pro';
   // Custom token limit specified by the user when plan === 'Custom'
   private customTokenLimit: number | undefined = undefined;
-  private detectedTokenLimit = 7000;
+  private detectedTokenLimit: number = PLAN_LIMITS.Pro;
   // Basis for cost shown in menu bar
   private menuBarCostSource: 'today' | 'sessionWindow' = 'today';
   private readonly statsCachePath: string;
@@ -271,7 +272,11 @@ export class CCUsageService {
       return stats;
     } catch (error) {
       console.error('Error fetching usage stats:', error);
-      return this.getMockStats();
+      // Returning mock data here used to leak fake numbers (4,200 tokens,
+      // $2.45 cost, fabricated week/month series) into the UI on transient
+      // file errors. Default zeros let the renderer show an honest
+      // "no data" state instead of plausible-but-wrong numbers.
+      return this.getDefaultStats();
     }
   }
 
@@ -404,8 +409,8 @@ export class CCUsageService {
 
     // Calculate enhanced metrics
     const velocity = this.calculateVelocityFromBlocks(blocks, burnRate);
-    const resetInfo = this.resetTimeService.calculateResetInfo();
-    const prediction = this.calculatePredictionInfo(tokensUsed, tokenLimit, velocity, resetInfo);
+    const resetInfo = this.resetTimeService.calculateResetInfo(activeBlock.endTime);
+    const prediction = this.calculatePredictionInfo(tokensUsed, tokenLimit, velocity);
 
     // Update session tracking with 5-hour rolling windows
     const sessionTracking = this.sessionTracker.updateFromBlocks(
@@ -415,19 +420,18 @@ export class CCUsageService {
     // Use daily data if provided, otherwise convert from blocks
     let processedDailyData: DailyUsage[];
     if (dailyData) {
-      // Process the daily data from ccusage, filtering out synthetic models
+      // Process the daily data from ccusage, filtering out synthetic models.
+      // Cache-read tokens excluded — see getTotalTokensFromBlock.
       processedDailyData = dailyData.map((day) => ({
         date: day.date,
-        totalTokens:
-          day.inputTokens + day.outputTokens + day.cacheCreationTokens + day.cacheReadTokens,
+        totalTokens: day.inputTokens + day.outputTokens + day.cacheCreationTokens,
         totalCost: day.totalCost,
         models: day.modelBreakdowns
           .filter((mb: ModelBreakdown) => mb.modelName !== '<synthetic>')
           .reduce(
             (acc: { [key: string]: { tokens: number; cost: number } }, mb: ModelBreakdown) => {
               acc[mb.modelName] = {
-                tokens:
-                  mb.inputTokens + mb.outputTokens + mb.cacheCreationTokens + mb.cacheReadTokens,
+                tokens: mb.inputTokens + mb.outputTokens + mb.cacheCreationTokens,
                 cost: mb.cost,
               };
               return acc;
@@ -496,85 +500,74 @@ export class CCUsageService {
   }
 
   /**
-   * Get total tokens from a session block
+   * Total user-billable tokens for a session block.
+   * Cache-read tokens are excluded — they're prompt-cache hits, weighted
+   * roughly 0.1× by Anthropic's rate limiter and contributing very little
+   * to cost. Including them inflates the displayed "tokens used" by 10-100×
+   * on cache-heavy sessions and mis-triggers the Custom plan auto-detect.
    */
   private getTotalTokensFromBlock(block: SessionBlock): number {
     const counts = block.tokenCounts;
-    return (
-      counts.inputTokens +
-      counts.outputTokens +
-      counts.cacheCreationInputTokens +
-      counts.cacheReadInputTokens
-    );
+    return counts.inputTokens + counts.outputTokens + counts.cacheCreationInputTokens;
   }
 
   /**
-   * Get maximum tokens from all previous blocks (like Python's get_token_limit)
+   * Largest single-block token total observed across history. Used to seed
+   * the auto-detected plan limit. Includes the active block too — the
+   * previous version skipped it, so a fresh install or single-session user
+   * always fell back to Pro (7K) regardless of how heavy the session was.
    */
   private getMaxTokensFromBlocks(blocks: SessionBlock[]): number {
     let maxTokens = 0;
 
     for (const block of blocks) {
-      if (!block.isGap && !block.isActive) {
-        const totalTokens = this.getTotalTokensFromBlock(block);
-        if (totalTokens > maxTokens) {
-          maxTokens = totalTokens;
-        }
+      if (block.isGap) continue;
+      const totalTokens = this.getTotalTokensFromBlock(block);
+      if (totalTokens > maxTokens) {
+        maxTokens = totalTokens;
       }
     }
 
-    // Return the highest found, or default to pro if none found
-    return maxTokens > 0 ? maxTokens : 7000;
+    return maxTokens > 0 ? maxTokens : PLAN_LIMITS.Pro;
   }
 
   /**
-   * Calculate hourly burn rate based on Python implementation
+   * Tokens-per-HOUR consumed in the last hour.
+   *
+   * Walks individual entries by their own timestamp instead of pro-rating
+   * the enclosing block uniformly across its lifetime. Pro-rating made the
+   * burn rate stay artificially high after activity stopped, because the
+   * tokens of a still-active 5-hour block were spread across all minutes
+   * including the idle ones at the end.
+   *
+   * The sum equals tokens in the last hour, which by definition is the
+   * tokens-per-hour rate for that window — no further conversion needed.
+   * (Previous version returned tokens/min and relied on every consumer to
+   * multiply by 60, which the UI labels and depletion math both forgot.)
    */
   private calculateHourlyBurnRate(blocks: SessionBlock[]): number {
     if (!blocks || blocks.length === 0) return 0;
 
-    const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
     let totalTokens = 0;
 
     for (const block of blocks) {
       if (block.isGap) continue;
+      // Skip blocks that ended before the window — entries can't contribute.
+      const end = block.actualEndTime ?? block.endTime;
+      if (!block.isActive && end.getTime() < oneHourAgo) continue;
 
-      const startTime = block.startTime;
-
-      // Determine session end time
-      let sessionEnd: Date;
-      if (block.isActive) {
-        sessionEnd = now;
-      } else if (block.actualEndTime) {
-        sessionEnd = block.actualEndTime;
-      } else {
-        sessionEnd = block.endTime;
-      }
-
-      // Skip if session ended before the last hour
-      if (sessionEnd < oneHourAgo) continue;
-
-      // Calculate overlap with last hour
-      const sessionStartInHour = startTime > oneHourAgo ? startTime : oneHourAgo;
-      const sessionEndInHour = sessionEnd < now ? sessionEnd : now;
-
-      if (sessionEndInHour <= sessionStartInHour) continue;
-
-      // Calculate portion of tokens used in the last hour
-      const totalSessionDuration = (sessionEnd.getTime() - startTime.getTime()) / (1000 * 60); // minutes
-      const hourDuration =
-        (sessionEndInHour.getTime() - sessionStartInHour.getTime()) / (1000 * 60); // minutes
-
-      if (totalSessionDuration > 0) {
-        const blockTotalTokens = this.getTotalTokensFromBlock(block);
-        const tokensInHour = blockTotalTokens * (hourDuration / totalSessionDuration);
-        totalTokens += tokensInHour;
+      for (const entry of block.entries) {
+        const ts = (entry.timestamp as Date).getTime?.() ?? new Date(entry.timestamp).getTime();
+        if (ts < oneHourAgo) continue;
+        totalTokens +=
+          entry.usage.inputTokens +
+          entry.usage.outputTokens +
+          entry.usage.cacheCreationInputTokens;
       }
     }
 
-    // Return tokens per minute like Python script
-    return totalTokens / 60;
+    return totalTokens;
   }
 
   /**
@@ -600,11 +593,11 @@ export class CCUsageService {
           dailyMap.set(date, daily);
         }
 
+        // Cache-read tokens excluded — see getTotalTokensFromBlock.
         const entryTokens =
           entry.usage.inputTokens +
           entry.usage.outputTokens +
-          entry.usage.cacheCreationInputTokens +
-          entry.usage.cacheReadInputTokens;
+          entry.usage.cacheCreationInputTokens;
         const entryCost = entry.costUSD ?? 0;
 
         daily.totalTokens += entryTokens;
@@ -627,50 +620,95 @@ export class CCUsageService {
   }
 
   /**
-   * Calculate velocity info from blocks
+   * 24h and 7d rolling averages, computed from individual entry timestamps
+   * so the windows are honored exactly. The previous version filtered
+   * whole blocks by `block.startTime` and then divided by a fixed 24/168,
+   * which both over-counted (a 5-hour block starting 23h ago was credited
+   * in full to the last 24h) and under-counted (a still-active block that
+   * started 25h ago was excluded entirely).
    */
   private calculateVelocityFromBlocks(
     blocks: SessionBlock[],
     currentBurnRate: number
   ): VelocityInfo {
-    const now = new Date();
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-    // Calculate 24-hour average
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const last24HourBlocks = blocks.filter((b) => !b.isGap && b.startTime >= oneDayAgo);
     let tokens24h = 0;
-    for (const block of last24HourBlocks) {
-      tokens24h += this.getTotalTokensFromBlock(block);
-    }
-    const average24h = tokens24h / 24; // tokens per hour
-
-    // Calculate 7-day average
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const last7DayBlocks = blocks.filter((b) => !b.isGap && b.startTime >= oneWeekAgo);
     let tokens7d = 0;
-    for (const block of last7DayBlocks) {
-      tokens7d += this.getTotalTokensFromBlock(block);
+
+    for (const block of blocks) {
+      if (block.isGap) continue;
+      const end = block.actualEndTime ?? block.endTime;
+      if (!block.isActive && end.getTime() < oneWeekAgo) continue;
+
+      for (const entry of block.entries) {
+        const ts = (entry.timestamp as Date).getTime?.() ?? new Date(entry.timestamp).getTime();
+        if (ts < oneWeekAgo) continue;
+        const entryTokens =
+          entry.usage.inputTokens +
+          entry.usage.outputTokens +
+          entry.usage.cacheCreationInputTokens;
+        tokens7d += entryTokens;
+        if (ts >= oneDayAgo) tokens24h += entryTokens;
+      }
     }
-    const average7d = tokens7d / (7 * 24); // tokens per hour
 
-    // Trend analysis
+    const average24h = tokens24h / 24;
+    const average7d = tokens7d / (7 * 24);
+
+    // currentBurnRate is now tokens/hour (see calculateHourlyBurnRate).
     const trendPercent =
-      average24h > 0 ? ((currentBurnRate * 60 - average24h) / average24h) * 100 : 0;
+      average24h > 0 ? ((currentBurnRate - average24h) / average24h) * 100 : 0;
     let trend: 'increasing' | 'decreasing' | 'stable' = 'stable';
-
     if (Math.abs(trendPercent) > 15) {
       trend = trendPercent > 0 ? 'increasing' : 'decreasing';
     }
 
     return {
-      current: currentBurnRate * 60, // convert to tokens per hour
+      current: currentBurnRate,
       average24h,
       average7d,
       trend,
       trendPercent: Math.round(trendPercent * 10) / 10,
-      peakHour: 14, // Simplified for now
+      peakHour: this.calculatePeakHourFromBlocks(blocks),
       isAccelerating: trend === 'increasing' && trendPercent > 20,
     };
+  }
+
+  /**
+   * Hour of day (0-23, local time) with the highest token consumption
+   * across the last 7 days. Returns 12 (noon) when there's no data.
+   */
+  private calculatePeakHourFromBlocks(blocks: SessionBlock[]): number {
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const buckets = new Array(24).fill(0);
+
+    for (const block of blocks) {
+      if (block.isGap) continue;
+      const end = block.actualEndTime ?? block.endTime;
+      if (!block.isActive && end.getTime() < oneWeekAgo) continue;
+
+      for (const entry of block.entries) {
+        const ts = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
+        if (ts.getTime() < oneWeekAgo) continue;
+        buckets[ts.getHours()] +=
+          entry.usage.inputTokens +
+          entry.usage.outputTokens +
+          entry.usage.cacheCreationInputTokens;
+      }
+    }
+
+    let peak = 12;
+    let max = 0;
+    for (let i = 0; i < 24; i++) {
+      if (buckets[i] > max) {
+        max = buckets[i];
+        peak = i;
+      }
+    }
+    return peak;
   }
 
   private getEmptyDailyUsage(): DailyUsage {
@@ -708,8 +746,8 @@ export class CCUsageService {
 
   private getMockStats(): UsageStats {
     const today = new Date().toISOString().split('T')[0];
-    const tokensUsed = 4200;
-    const tokenLimit = 7000;
+    const tokensUsed = Math.round(PLAN_LIMITS.Pro * 0.6);
+    const tokenLimit = PLAN_LIMITS.Pro;
     const todayCost = 2.45;
     const burnRate = 35;
 
@@ -729,8 +767,6 @@ export class CCUsageService {
       depletionTime: new Date(Date.now() + 80 * 60 * 60 * 1000).toISOString(),
       confidence: 85,
       daysRemaining: 3.3,
-      recommendedDailyLimit: 950,
-      onTrackForReset: true,
     };
 
     return {
@@ -933,8 +969,6 @@ export class CCUsageService {
       depletionTime: null,
       confidence: 0,
       daysRemaining: 0,
-      recommendedDailyLimit: 0,
-      onTrackForReset: true,
     };
 
     return {
@@ -957,12 +991,12 @@ export class CCUsageService {
           : (this.selectedPlan as 'Pro' | 'Max5' | 'Max20' | 'Custom'),
       tokenLimit:
         this.selectedPlan === 'Custom'
-          ? (this.customTokenLimit ?? 500000)
+          ? (this.customTokenLimit ?? PLAN_LIMITS.Custom)
           : this.getTokenLimit(this.selectedPlan === 'auto' ? 'Pro' : this.selectedPlan),
       tokensUsed: 0,
       tokensRemaining:
         this.selectedPlan === 'Custom'
-          ? (this.customTokenLimit ?? 500000)
+          ? (this.customTokenLimit ?? PLAN_LIMITS.Custom)
           : this.getTokenLimit(this.selectedPlan === 'auto' ? 'Pro' : this.selectedPlan),
       percentageUsed: 0,
     };
@@ -1024,28 +1058,28 @@ export class CCUsageService {
   }
 
   /**
-   * Calculate prediction information with confidence levels
+   * Calculate prediction information with confidence levels.
+   *
+   * Note: previously also computed `recommendedDailyLimit` and
+   * `onTrackForReset` from a synthesized monthly billing cycle. Both were
+   * never displayed and were based on an incorrect cadence model — removed
+   * along with the monthly cycle in ResetTimeService.
    */
   private calculatePredictionInfo(
     tokensUsed: number,
     tokenLimit: number,
-    velocity: VelocityInfo,
-    resetInfo: ResetTimeInfo
+    velocity: VelocityInfo
   ): PredictionInfo {
     const tokensRemaining = Math.max(0, tokenLimit - tokensUsed);
 
-    // Calculate confidence based on data availability and consistency
-    let confidence = 50; // Base confidence
+    let confidence = 50;
     if (velocity.current > 0 && velocity.average24h > 0) {
       confidence = Math.min(95, confidence + 30);
-
-      // Reduce confidence if trend is highly volatile
       if (Math.abs(velocity.trendPercent) > 50) {
         confidence -= 20;
       }
     }
 
-    // Predicted depletion time
     let depletionTime: string | null = null;
     let daysRemaining = 0;
 
@@ -1055,25 +1089,10 @@ export class CCUsageService {
       depletionTime = new Date(Date.now() + hoursRemaining * 60 * 60 * 1000).toISOString();
     }
 
-    // Recommended daily limit to last until reset
-    const recommendedDailyLimit = this.resetTimeService.calculateRecommendedDailyLimit(
-      tokensRemaining,
-      resetInfo
-    );
-
-    // Check if on track for reset
-    const onTrackForReset = this.resetTimeService.isOnTrackForReset(
-      tokensUsed,
-      tokenLimit,
-      resetInfo
-    );
-
     return {
       depletionTime,
       confidence: Math.round(confidence),
       daysRemaining: Math.round(daysRemaining * 10) / 10,
-      recommendedDailyLimit,
-      onTrackForReset,
     };
   }
 
@@ -1184,18 +1203,26 @@ export class CCUsageService {
   }
 
   /**
-   * Calculate total cost within the rolling 5-hour session window from raw blocks
+   * Total cost incurred within the rolling 5-hour window. Walks individual
+   * entries by their own timestamp — the previous version added the whole
+   * block's cost whenever the block's startTime fell inside the window,
+   * which double-counted any activity from before the window for blocks
+   * straddling the boundary.
    */
   private getSessionWindowCostFromBlocks(blocks: SessionBlock[]): number {
     if (!blocks || blocks.length === 0) return 0;
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+    const windowStart = Date.now() - 5 * 60 * 60 * 1000;
     let total = 0;
 
     for (const block of blocks) {
       if (block.isGap) continue;
-      if (block.startTime >= windowStart) {
-        total += block.costUSD || 0;
+      const end = block.actualEndTime ?? block.endTime;
+      if (!block.isActive && end.getTime() < windowStart) continue;
+
+      for (const entry of block.entries) {
+        const ts = (entry.timestamp as Date).getTime?.() ?? new Date(entry.timestamp).getTime();
+        if (ts < windowStart) continue;
+        total += entry.costUSD ?? 0;
       }
     }
     return total;

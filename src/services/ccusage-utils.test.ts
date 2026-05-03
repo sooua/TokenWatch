@@ -32,21 +32,21 @@ describe('detectPlan', () => {
     expect(detectPlan(PLAN_LIMITS.Max5 + 1)).toBe('Max20');
     expect(detectPlan(PLAN_LIMITS.Max20)).toBe('Max20');
     expect(detectPlan(PLAN_LIMITS.Max20 + 1)).toBe('Custom');
-    expect(detectPlan(1_000_000)).toBe('Custom');
+    expect(detectPlan(PLAN_LIMITS.Custom + 1)).toBe('Custom');
   });
 });
 
 describe('getTokenLimit', () => {
-  it('returns the per-plan daily cap', () => {
-    expect(getTokenLimit('Pro')).toBe(7000);
-    expect(getTokenLimit('Max5')).toBe(35000);
-    expect(getTokenLimit('Max20')).toBe(140000);
+  it('returns the per-plan 5h-window cap', () => {
+    expect(getTokenLimit('Pro')).toBe(PLAN_LIMITS.Pro);
+    expect(getTokenLimit('Max5')).toBe(PLAN_LIMITS.Max5);
+    expect(getTokenLimit('Max20')).toBe(PLAN_LIMITS.Max20);
   });
 
   it('falls back to the Custom ceiling for unknown plans', () => {
-    expect(getTokenLimit('Custom')).toBe(500000);
-    expect(getTokenLimit('auto')).toBe(500000);
-    expect(getTokenLimit('')).toBe(500000);
+    expect(getTokenLimit('Custom')).toBe(PLAN_LIMITS.Custom);
+    expect(getTokenLimit('auto')).toBe(PLAN_LIMITS.Custom);
+    expect(getTokenLimit('')).toBe(PLAN_LIMITS.Custom);
   });
 });
 

@@ -21,13 +21,12 @@ export interface DailyUsage {
 }
 
 export interface ResetTimeInfo {
-  nextResetTime: string; // ISO string of next reset
+  nextResetTime: string; // ISO string of next reset (active block's endTime)
   timeUntilReset: number; // milliseconds until reset
-  resetHour: number; // hour when reset occurs (0-23)
+  cycleDurationMs: number; // length of one cycle (Claude's 5h session window)
+  percentUntilReset: number; // percentage of current cycle elapsed (0-100)
+  resetHour: number; // hour when reset occurs (0-23) — kept for legacy display
   timezone: string; // timezone identifier (e.g., 'America/Los_Angeles')
-  percentUntilReset: number; // percentage of billing cycle completed (0-100)
-  daysInCycle: number; // total days in current billing cycle
-  daysSinceReset: number; // days elapsed since last reset
 }
 
 export interface VelocityInfo {
@@ -44,8 +43,6 @@ export interface PredictionInfo {
   depletionTime: string | null; // predicted depletion time
   confidence: number; // confidence level 0-100
   daysRemaining: number; // estimated days until depletion
-  recommendedDailyLimit: number; // suggested daily token limit
-  onTrackForReset: boolean; // will tokens last until reset
 }
 
 export interface ActualResetInfo {

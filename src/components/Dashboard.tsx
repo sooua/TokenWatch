@@ -434,40 +434,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
             </div>
           </StatCard>
 
-          <StatCard
-            icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
-            title={formatNumber(stats.burnRate)}
-            subtitle={t('dashboard.burnRate')}
-          >
-            <div className="space-y-2">
-              <StatRow
-                label={t('dashboard.depletion')}
-                value={
-                  stats.actualResetInfo?.formattedTimeRemaining || t('dashboard.noActiveSession')
-                }
-              />
-              <div
-                className="text-[11px] text-center py-1 rounded-md"
-                style={{
-                  color:
-                    stats.burnRate > 1000
-                      ? 'var(--error-crimson)'
-                      : stats.burnRate > 500
-                        ? 'var(--terracotta)'
-                        : 'var(--claude-olive)',
-                  background: 'var(--parchment)',
-                  border: '1px solid var(--cream)',
-                  letterSpacing: '0.02em',
-                }}
+          {(() => {
+            // burnRate is tokens/hour; "high" = pace would burn the whole
+            // 5h plan budget within an hour; "moderate" = above half that.
+            // The previous 1000/500 thresholds dated from when burnRate
+            // was tokens/min and would never trigger now without scaling.
+            const burnHigh = Math.max(stats.tokenLimit / 5, 1);
+            const burnMid = burnHigh / 2;
+            return (
+              <StatCard
+                icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
+                title={formatNumber(stats.burnRate)}
+                subtitle={t('dashboard.burnRate')}
               >
-                {stats.burnRate > 1000
-                  ? t('dashboard.usageHigh')
-                  : stats.burnRate > 500
-                    ? t('dashboard.usageModerate')
-                    : t('dashboard.usageNormal')}
-              </div>
-            </div>
-          </StatCard>
+                <div className="space-y-2">
+                  <StatRow
+                    label={t('dashboard.depletion')}
+                    value={
+                      stats.actualResetInfo?.formattedTimeRemaining ||
+                      t('dashboard.noActiveSession')
+                    }
+                  />
+                  <div
+                    className="text-[11px] text-center py-1 rounded-md"
+                    style={{
+                      color:
+                        stats.burnRate > burnHigh
+                          ? 'var(--error-crimson)'
+                          : stats.burnRate > burnMid
+                            ? 'var(--terracotta)'
+                            : 'var(--claude-olive)',
+                      background: 'var(--parchment)',
+                      border: '1px solid var(--cream)',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {stats.burnRate > burnHigh
+                      ? t('dashboard.usageHigh')
+                      : stats.burnRate > burnMid
+                        ? t('dashboard.usageModerate')
+                        : t('dashboard.usageNormal')}
+                  </div>
+                </div>
+              </StatCard>
+            );
+          })()}
 
           <StatCard
             icon={<CalendarDays className="w-4 h-4" strokeWidth={1.75} />}
@@ -503,7 +514,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
               />
               <StatRow
                 label={t('dashboard.avgDaily')}
-                value={formatCurrency(stats.thisWeek.reduce((s, d) => s + d.totalCost, 0) / 7)}
+                value={formatCurrency(
+                  stats.thisWeek.reduce((s, d) => s + d.totalCost, 0) /
+                    Math.max(1, stats.thisWeek.length)
+                )}
               />
             </div>
           </StatCard>
