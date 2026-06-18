@@ -96,6 +96,9 @@ class TokenWatchApp {
   private firstFetchDone = false;
   private progressTimer: NodeJS.Timeout | null = null;
   private standaloneWindow = false;
+  // Whether to fold today's Codex per-model usage into the "by model"
+  // distribution (mirrors the Codex card toggle).
+  private showCodexCard = false;
   private miniHudWindow: BrowserWindow | null = null;
   private miniHudEnabled = false;
   private miniHudContent: 'percentage' | 'percentageCost' | 'percentageCostBurn' =
@@ -122,6 +125,7 @@ class TokenWatchApp {
     this.menuBarDisplayMode = settings.menuBarDisplayMode || 'alternate';
     this.menuBarCostSource = settings.menuBarCostSource || 'today';
     this.standaloneWindow = settings.standaloneWindow === true;
+    this.showCodexCard = settings.showCodexCard === true;
     this.miniHudEnabled = settings.miniHud === true;
     this.miniHudContent = settings.miniHudContent || 'percentageCost';
 
@@ -830,7 +834,7 @@ class TokenWatchApp {
 
     ipcMain.handle('get-usage-stats', async () => {
       try {
-        return await this.usageService.getUsageStats();
+        return await this.withCodexModels(await this.usageService.getUsageStats());
       } catch (error) {
         logger.error('Error getting usage stats:', error);
         throw error;
@@ -859,7 +863,7 @@ class TokenWatchApp {
       try {
         const stats = await this.usageService.getUsageStats();
         await this.updateTrayTitle();
-        return stats;
+        return this.withCodexModels(stats);
       } catch (error) {
         logger.error('Error refreshing data:', error);
         throw error;
@@ -1001,6 +1005,10 @@ class TokenWatchApp {
           }
         }
 
+        if (typeof settings.showCodexCard === 'boolean') {
+          this.showCodexCard = settings.showCodexCard;
+        }
+
         return { success: true };
       } catch (error) {
         logger.error('Error saving settings:', error);
@@ -1030,6 +1038,32 @@ class TokenWatchApp {
 
     // Release the ccusage parsing worker thread explicitly.
     void this.usageService.dispose();
+  }
+
+  // Fold today's Codex per-model usage into stats.today.models so the "by
+  // model" distribution shows both agents. Returns a shallow copy — never
+  // mutates the service's cached stats. Codex tokens are non-cached (see
+  // CodexService.getTodayModelUsage) to stay comparable with Claude. Per-model
+  // percentages in the UI divide by the sum of this map, so adding Codex
+  // entries keeps them consistent without touching today.totalTokens.
+  private async withCodexModels<T extends { today?: { models?: Record<string, unknown> } }>(
+    stats: T
+  ): Promise<T> {
+    if (!this.showCodexCard || !stats?.today) return stats;
+    try {
+      const codexModels = await this.codexService.getTodayModelUsage();
+      if (!codexModels || Object.keys(codexModels).length === 0) return stats;
+      return {
+        ...stats,
+        today: {
+          ...stats.today,
+          models: { ...(stats.today.models ?? {}), ...codexModels },
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to merge Codex model usage', error);
+      return stats;
+    }
   }
 
   private startUsagePolling() {

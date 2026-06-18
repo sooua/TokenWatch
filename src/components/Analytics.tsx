@@ -163,7 +163,11 @@ const useModelBreakdown = (stats: UsageStats) =>
   useMemo(() => {
     const today = stats.today;
     if (!today.models || Object.keys(today.models).length === 0) return [];
-    return Object.entries(today.models).map(([model, data], index) => ({
+    const entries = Object.entries(today.models);
+    // Percentage base is the sum of model entries (may include merged Codex
+    // models), not today.totalTokens — keeps shares summing to 100.
+    const modelTotal = entries.reduce((sum, [, data]) => sum + (data.tokens || 0), 0);
+    return entries.map(([model, data], index) => ({
       name: model
         .replace(/^claude-/, '')
         .replace(/-(\d{8}.*)?$/, '')
@@ -173,7 +177,7 @@ const useModelBreakdown = (stats: UsageStats) =>
         .trim(),
       value: data.tokens,
       cost: data.cost,
-      percentage: today.totalTokens > 0 ? (data.tokens / today.totalTokens) * 100 : 0,
+      percentage: modelTotal > 0 ? (data.tokens / modelTotal) * 100 : 0,
       color: modelColors[index % modelColors.length],
     }));
   }, [stats]);

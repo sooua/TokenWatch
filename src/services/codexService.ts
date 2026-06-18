@@ -54,6 +54,8 @@ export class CodexService {
   private readonly codexHome: string;
   private cached: CodexStats | null = null;
   private lastFetchedAt = 0;
+  private cachedTodayModels: Record<string, { tokens: number; cost: number }> | null = null;
+  private todayModelsAt = 0;
   private readonly CACHE_DURATION_MS = 15_000;
 
   constructor() {
@@ -69,6 +71,110 @@ export class CodexService {
 
   isInstalled(): boolean {
     return fs.existsSync(path.join(this.codexHome, 'sessions'));
+  }
+
+  /**
+   * Today's Codex token usage grouped by model, for the dashboard's
+   * "by model" distribution. Walks the session files touched since local
+   * midnight; for each `token_count` event today, attributes the turn's
+   * NON-cached tokens (`last_token_usage.total - cached_input`) to the model
+   * from the most recent `turn_context`. Non-cached is used so the numbers are
+   * comparable with the Claude breakdown (which excludes cache-read). Cost is
+   * left at 0 — Codex usage is plan-based and the logs carry no dollar amount.
+   */
+  async getTodayModelUsage(): Promise<Record<string, { tokens: number; cost: number }>> {
+    const now = Date.now();
+    if (this.cachedTodayModels && now - this.todayModelsAt < this.CACHE_DURATION_MS) {
+      return this.cachedTodayModels;
+    }
+    const result = await this.computeTodayModelUsage();
+    this.cachedTodayModels = result;
+    this.todayModelsAt = now;
+    return result;
+  }
+
+  private async computeTodayModelUsage(): Promise<
+    Record<string, { tokens: number; cost: number }>
+  > {
+    const models: Record<string, { tokens: number; cost: number }> = {};
+    if (!this.isInstalled()) return models;
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startMs = startOfDay.getTime();
+
+    const files = await this.collectRecentJsonl(path.join(this.codexHome, 'sessions'), startMs);
+
+    for (const file of files) {
+      let raw: string;
+      try {
+        raw = await fsp.readFile(file, 'utf8');
+      } catch {
+        continue;
+      }
+      let currentModel = 'codex';
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line) continue;
+        let parsed: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue; // tail/partial line
+        }
+        const payload = parsed.payload as
+          | { model?: string; type?: string; info?: { last_token_usage?: CodexTokenUsage } }
+          | undefined;
+
+        if (parsed.type === 'turn_context' && typeof payload?.model === 'string') {
+          currentModel = payload.model;
+          continue;
+        }
+        if (
+          parsed.type === 'event_msg' &&
+          payload?.type === 'token_count' &&
+          payload.info?.last_token_usage
+        ) {
+          const ts =
+            typeof parsed.timestamp === 'string' ? Date.parse(parsed.timestamp) : Number.NaN;
+          if (!Number.isFinite(ts) || ts < startMs) continue;
+          const last = payload.info.last_token_usage;
+          const nonCached = Math.max(0, (last.total_tokens ?? 0) - (last.cached_input_tokens ?? 0));
+          if (nonCached <= 0) continue;
+          if (!models[currentModel]) models[currentModel] = { tokens: 0, cost: 0 };
+          models[currentModel].tokens += nonCached;
+        }
+      }
+    }
+    return models;
+  }
+
+  /** Collect .jsonl files under dir whose mtime is at/after `sinceMs`. */
+  private async collectRecentJsonl(dir: string, sinceMs: number): Promise<string[]> {
+    const out: string[] = [];
+    const walk = async (d: string, depth: number): Promise<void> => {
+      if (depth > 5) return;
+      let entries: fs.Dirent[];
+      try {
+        entries = await fsp.readdir(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const ent of entries) {
+        const full = path.join(d, ent.name);
+        if (ent.isDirectory()) {
+          await walk(full, depth + 1);
+        } else if (ent.isFile() && ent.name.endsWith('.jsonl')) {
+          try {
+            const st = await fsp.stat(full);
+            if (st.mtimeMs >= sinceMs) out.push(full);
+          } catch {
+            /* skip unreadable */
+          }
+        }
+      }
+    };
+    await walk(dir, 0);
+    return out;
   }
 
   async getStats(): Promise<CodexStats> {

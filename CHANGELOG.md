@@ -9,6 +9,18 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-18
+### Added
+- **Codex models in the "by model" distribution.** Today's Codex usage
+  is now folded into the Dashboard and Analytics model breakdown, grouped
+  by model from the Codex session logs (`turn_context.model`). Gated on
+  the "Show Codex card" toggle. Codex tokens are counted non-cached
+  (`total − cached_input`) to stay comparable with the Claude breakdown,
+  and per-model percentages now divide by the sum of the model entries so
+  the shares sum to 100% with both agents included. Codex cost shows $0 —
+  the logs carry no dollar amount (plan-based usage); `today.totalTokens`
+  and the cost card remain Claude-only.
+
 ## [0.6.0] — 2026-06-18
 ### Added
 - **Persistent main-process log** at `~/.tokenwatch/logs/main.log`

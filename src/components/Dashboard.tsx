@@ -593,15 +593,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
           <CardContent>
             <div className="space-y-3">
               {stats.today.models && Object.keys(stats.today.models).length > 0 ? (
-                Object.entries(stats.today.models).map(([modelName, modelData], index) => (
-                  <ModelUsageItem
-                    key={modelName}
-                    modelName={modelName}
-                    modelData={modelData}
-                    totalTokens={stats.today.totalTokens}
-                    index={index}
-                  />
-                ))
+                (() => {
+                  // Percentage base is the sum of the model entries (which may
+                  // include merged Codex models), not today.totalTokens — so
+                  // the shares sum to 100 and stay correct with Codex folded in.
+                  const modelTotal = Object.values(stats.today.models).reduce(
+                    (sum, m) => sum + (m.tokens || 0),
+                    0
+                  );
+                  return Object.entries(stats.today.models).map(([modelName, modelData], index) => (
+                    <ModelUsageItem
+                      key={modelName}
+                      modelName={modelName}
+                      modelData={modelData}
+                      totalTokens={modelTotal}
+                      index={index}
+                    />
+                  ));
+                })()
               ) : (
                 <div className="text-center py-8" style={{ color: 'var(--claude-stone)' }}>
                   <svg
