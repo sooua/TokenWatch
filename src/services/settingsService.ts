@@ -9,6 +9,9 @@ export interface AppSettings {
   resetHour: number;
   plan: 'auto' | 'Pro' | 'Max5' | 'Max20' | 'Custom';
   customTokenLimit?: number;
+  // Effective token limit calibrated against Claude's /status (0/undefined =
+  // not calibrated). Overrides the plan limit for percentage display when set.
+  calibratedTokenLimit?: number;
   menuBarDisplayMode: 'percentage' | 'cost' | 'alternate';
   menuBarCostSource: 'today' | 'sessionWindow';
   launchOnStartup: boolean;
@@ -42,6 +45,7 @@ export class SettingsService {
       resetHour: 0,
       plan: 'auto',
       customTokenLimit: undefined,
+      calibratedTokenLimit: undefined,
       menuBarDisplayMode: 'alternate',
       menuBarCostSource: 'today',
       launchOnStartup: false,

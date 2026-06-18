@@ -20,6 +20,7 @@ export interface ElectronAPI {
   refreshData: () => Promise<any>;
   quitApp: () => Promise<void>;
   takeScreenshot: () => Promise<ScreenshotResult>;
+  openLogsFolder: () => Promise<{ success: boolean; path?: string; error?: string }>;
   onUsageUpdated: (callback: () => void) => void;
   removeUsageUpdatedListener: (callback: () => void) => void;
   onLoadingProgress: (callback: LoadingProgressListener) => (...args: unknown[]) => void;

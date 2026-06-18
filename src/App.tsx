@@ -3,7 +3,6 @@ import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import i18n, { resolveLanguage, type SupportedLanguage } from './i18n';
 import { Analytics } from './components/Analytics';
 import { Dashboard } from './components/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -11,9 +10,10 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { NavigationTabs } from './components/NavigationTabs';
 import { SettingsPanel } from './components/SettingsPanel';
 import { TerminalView } from './components/TerminalView';
+import { UpdateBanner } from './components/UpdateBanner';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
-import { UpdateBanner } from './components/UpdateBanner';
+import i18n, { resolveLanguage, type SupportedLanguage } from './i18n';
 import type { UsageStats } from './types/usage';
 
 type ViewType = 'dashboard' | 'live' | 'analytics' | 'terminal' | 'settings';
@@ -139,6 +139,12 @@ const WindowControls: React.FC<{ isMaximized: boolean }> = ({ isMaximized }) => 
   );
 };
 
+interface AppNotification {
+  type: 'success' | 'warning' | 'error' | 'info';
+  title: string;
+  message?: string;
+}
+
 interface AppState {
   currentView: ViewType;
   stats: UsageStats | null;
@@ -147,18 +153,12 @@ interface AppState {
   loadingMessage: string;
   error: string | null;
   sidebarExpanded: boolean;
-  notifications: Array<{
-    id: string;
-    type: 'success' | 'warning' | 'error' | 'info';
-    title: string;
-    message: string;
-    timestamp: Date;
-  }>;
   preferences: {
     timezone?: string;
     resetHour?: number;
     plan?: 'auto' | 'Pro' | 'Max5' | 'Max20' | 'Custom';
     customTokenLimit?: number;
+    calibratedTokenLimit?: number;
     menuBarDisplayMode?: 'percentage' | 'cost' | 'alternate';
     menuBarCostSource?: 'today' | 'sessionWindow';
     launchOnStartup?: boolean;
@@ -181,7 +181,6 @@ const App: React.FC = () => {
     loadingMessage: 'Initializing usage tracking...',
     error: null,
     sidebarExpanded: false,
-    notifications: [],
     preferences: {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       resetHour: 0,
@@ -360,33 +359,23 @@ const App: React.FC = () => {
     }
   }, [t]);
 
-  // Add notification with auto-dismiss
-  const addNotification = (
-    notification: Omit<AppState['notifications'][0], 'id' | 'timestamp'>
-  ) => {
-    const newNotification = {
-      ...notification,
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
-      timestamp: new Date(),
-    };
-
-    setState((prev) => ({
-      ...prev,
-      notifications: [newNotification, ...prev.notifications.slice(0, 4)], // Keep max 5
-    }));
-
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      removeNotification(newNotification.id);
-    }, 5000);
-  };
-
-  // Remove notification
-  const removeNotification = (id: string) => {
-    setState((prev) => ({
-      ...prev,
-      notifications: prev.notifications.filter((n) => n.id !== id),
-    }));
+  // Surface a notification via sonner's <Toaster> (mounted below). Earlier this
+  // pushed into a state queue that nothing rendered, so the toasts were dropped.
+  const addNotification = (notification: AppNotification) => {
+    const opts = notification.message ? { description: notification.message } : undefined;
+    switch (notification.type) {
+      case 'error':
+        toast.error(notification.title, opts);
+        break;
+      case 'success':
+        toast.success(notification.title, opts);
+        break;
+      case 'warning':
+        toast.warning(notification.title, opts);
+        break;
+      default:
+        toast(notification.title, opts);
+    }
   };
 
   // Update preferences
@@ -508,21 +497,24 @@ const App: React.FC = () => {
             event.preventDefault();
             window.electronAPI?.quitApp();
             break;
+          // Number shortcuts map to the visible tabs in order. There is no
+          // 'live' view rendered, so Ctrl/Cmd+2 previously navigated to a blank
+          // screen — the mapping now matches NavigationTabs exactly.
           case '1':
             event.preventDefault();
             navigateTo('dashboard');
             break;
           case '2':
             event.preventDefault();
-            navigateTo('live');
+            navigateTo('analytics');
             break;
           case '3':
             event.preventDefault();
-            navigateTo('analytics');
+            navigateTo('terminal');
             break;
           case '4':
             event.preventDefault();
-            navigateTo('terminal');
+            navigateTo('settings');
             break;
           case ',':
             event.preventDefault();

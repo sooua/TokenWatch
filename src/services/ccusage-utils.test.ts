@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PLAN_LIMITS,
   calculateBurnRate,
   detectPlan,
   getTokenLimit,
-  PLAN_LIMITS,
   toISOStringLocal,
 } from './ccusage-utils';
 

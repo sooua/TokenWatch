@@ -152,6 +152,30 @@ The app reads your Claude Code usage history from `~/.claude/projects/**/*.jsonl
 | Window anchor | Top-right, near the menu bar | Near the tray icon, clamped to the active display |
 | Notifications | Native Notification Center | Toast center (requires `AppUserModelId`, set automatically) |
 
+## FAQ
+
+### Why doesn't the percentage match Claude Code's `/status`?
+
+Because it **can't be derived exactly from local data.** Claude Code's JSONL logs only store raw per-message token counts (`input` / `output` / `cache_read` / `cache_creation`). The percentages, remaining quota, and reset times that `/status` shows are computed **server-side by Anthropic** (using an undisclosed, model-weighted formula and unpublished limits) and are only returned in API response headers — they are **never written to disk**.
+
+So TokenWatch estimates the percentage as `tokens used ÷ plan limit`, where:
+
+- **tokens used** excludes cache-read tokens. On a cache-heavy session these can be 95%+ of all tokens — including them would inflate the number ~10–100×, so they're left out (they're also weighted far below 1× by Anthropic's rate limiter).
+- **plan limit** is a community-estimated value (Pro / Max5 / Max20), not an official figure.
+
+Both differ from Anthropic's own method, so the raw estimate will not line up with `/status`.
+
+### How do I make the percentage track `/status`?
+
+Use **calibration** (Settings → Claude plan → *Calibrate against /status*):
+
+1. Run `/status` in Claude Code and note the **current session percentage** it shows.
+2. Enter that number in the calibration box and click **Calibrate**.
+
+TokenWatch back-solves your real effective limit (`limit = tokens used ÷ percentage`) and remembers it, so future percentages track `/status`. It's a linear fit — most accurate near your current usage level, and you can **Clear** it anytime to return to the estimate.
+
+> **Codex is different:** Codex CLI writes its authoritative rate-limit percentages (5-hour and weekly windows) into its session logs, so the Codex card's percentages already match `codex` `/status` with no calibration needed.
+
 ## Requirements
 
 - macOS 10.15+ **or** Windows 10/11 (x64)

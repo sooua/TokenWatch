@@ -388,7 +388,14 @@ const MainChart: React.FC<{
 
               {/* X-axis labels — every Nth to avoid overlap */}
               {chartData.map((d, i) => {
-                if (chartData.length > 10 && i % Math.ceil(chartData.length / 8) !== 0) return null;
+                // Thin labels on dense ranges, but always keep the last day so
+                // the axis doesn't end on an unlabeled point.
+                if (
+                  chartData.length > 10 &&
+                  i % Math.ceil(chartData.length / 8) !== 0 &&
+                  i !== chartData.length - 1
+                )
+                  return null;
                 const x =
                   chartType === 'bar'
                     ? padding.left +
@@ -530,13 +537,19 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
   const chartData = useChartData(stats, timeRange);
   const modelBreakdown = useModelBreakdown(stats);
 
-  const totalWeekTokens = stats.thisWeek.reduce((sum, d) => sum + d.totalTokens, 0);
-  const totalWeekCost = stats.thisWeek.reduce((sum, d) => sum + d.totalCost, 0);
-  // Divide by actual day count, not a fixed 7 — on day 1 of using the
-  // app this would otherwise under-state the average by 7×.
-  const dayCount = Math.max(1, stats.thisWeek.length);
-  const avgDailyTokens = totalWeekTokens / dayCount;
-  const avgDailyCost = totalWeekCost / dayCount;
+  // Summary tiles follow the selected range (chartData) — they used to be
+  // hardcoded to stats.thisWeek, so switching to 30d updated the chart but
+  // left the totals showing 7 days.
+  const rangeTotalTokens = chartData.reduce((sum, d) => sum + d.totalTokens, 0);
+  const rangeTotalCost = chartData.reduce((sum, d) => sum + d.totalCost, 0);
+  // Divide by actual day count, not a fixed 7/30 — on day 1 of using the
+  // app this would otherwise under-state the average.
+  const dayCount = Math.max(1, chartData.length);
+  const avgDailyTokens = rangeTotalTokens / dayCount;
+  const avgDailyCost = rangeTotalCost / dayCount;
+  const rangeLabel = timeRange === '7d' ? t('analytics.range7d') : t('analytics.range30d');
+  // Simple month projection from the running daily average.
+  const projectedMonthCost = avgDailyCost * 30;
 
   // Calibrate burn rate against the plan: anything that would deplete the
   // 5h window is "critical", anything above 50% of that is "warning".
@@ -621,17 +634,24 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
             />
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-2">
             <SummaryTile
-              label={t('analytics.totalTokens7d')}
-              value={formatNumber(totalWeekTokens)}
+              label={t('analytics.totalTokensRange', { range: rangeLabel })}
+              value={formatNumber(rangeTotalTokens)}
             />
-            <SummaryTile label={t('analytics.totalCost7d')} value={formatCurrency(totalWeekCost)} />
+            <SummaryTile
+              label={t('analytics.totalCostRange', { range: rangeLabel })}
+              value={formatCurrency(rangeTotalCost)}
+            />
             <SummaryTile
               label={t('analytics.avgDailyTokens')}
               value={formatNumber(Math.round(avgDailyTokens))}
             />
             <SummaryTile label={t('analytics.avgDailyCost')} value={formatCurrency(avgDailyCost)} />
+            <SummaryTile
+              label={t('analytics.projectedMonthCost')}
+              value={formatCurrency(projectedMonthCost)}
+            />
           </div>
         </CardContent>
       </Card>

@@ -435,10 +435,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
           </StatCard>
 
           {(() => {
-            // burnRate is tokens/hour; "high" = pace would burn the whole
-            // 5h plan budget within an hour; "moderate" = above half that.
-            // The previous 1000/500 thresholds dated from when burnRate
-            // was tokens/min and would never trigger now without scaling.
+            // burnRate is tokens/hour. tokenLimit is the 5h-window budget, so
+            // tokenLimit/5 is the even pace that exactly lasts the window;
+            // "high" = burning faster than that (would deplete before reset),
+            // "moderate" = above half that pace. The previous 1000/500
+            // thresholds dated from when burnRate was tokens/min.
             const burnHigh = Math.max(stats.tokenLimit / 5, 1);
             const burnMid = burnHigh / 2;
             return (

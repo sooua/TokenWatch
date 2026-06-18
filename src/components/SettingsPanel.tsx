@@ -4,6 +4,7 @@ import {
   Clock,
   Cpu,
   Download,
+  FolderOpen,
   Gauge,
   Globe,
   Languages,
@@ -60,6 +61,7 @@ interface SettingsPanelProps {
     resetHour?: number;
     plan?: 'auto' | 'Pro' | 'Max5' | 'Max20' | 'Custom';
     customTokenLimit?: number;
+    calibratedTokenLimit?: number;
     menuBarDisplayMode?: 'percentage' | 'cost' | 'alternate';
     menuBarCostSource?: 'today' | 'sessionWindow';
     launchOnStartup?: boolean;
@@ -86,6 +88,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
+  const [calibInput, setCalibInput] = useState('');
 
   useEffect(() => {
     window.electronAPI
@@ -156,6 +159,37 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   const handlePreferenceChange = (key: string, value: boolean | number | string) => {
     onUpdatePreferences({ [key]: value });
+  };
+
+  const handleOpenLogs = async () => {
+    const result = await window.electronAPI?.openLogsFolder?.();
+    if (result && !result.success) {
+      toast.error(t('settings.openLogsError'));
+    }
+  };
+
+  // Back-solve the effective token limit from the user's current /status
+  // percentage: limit = tokensUsed / (pct / 100). Stored so every future
+  // percentage tracks Claude's own number. See ccusageService.
+  const handleCalibrate = () => {
+    const pct = Number.parseFloat(calibInput);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      toast.error(t('settings.calibrateInvalid'));
+      return;
+    }
+    if (!stats.tokensUsed || stats.tokensUsed <= 0) {
+      toast.error(t('settings.calibrateNoUsage'));
+      return;
+    }
+    const effectiveLimit = Math.round(stats.tokensUsed / (pct / 100));
+    onUpdatePreferences({ calibratedTokenLimit: effectiveLimit });
+    setCalibInput('');
+    toast.success(t('settings.calibrateDone', { limit: effectiveLimit.toLocaleString() }));
+  };
+
+  const handleClearCalibration = () => {
+    onUpdatePreferences({ calibratedTokenLimit: 0 });
+    toast.success(t('settings.calibrateCleared'));
   };
 
   // Update current time every minute for real-time countdown
@@ -400,6 +434,68 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   })}
                 </div>
               </div>
+
+              {/* Calibration against Claude's /status. The plan limits are
+                  community estimates; entering the % Claude's own /status shows
+                  lets us back-solve the real limit so the displayed % matches. */}
+              <div
+                className="rounded-lg p-3 space-y-2"
+                style={{ background: 'var(--sand)', boxShadow: '0 0 0 1px var(--cream)' }}
+              >
+                <div className="text-sm" style={{ color: 'var(--claude-olive)' }}>
+                  {t('settings.calibrateLabel')}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--claude-stone)' }}>
+                  {t('settings.calibrateHint')}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    value={calibInput}
+                    onChange={(e) => setCalibInput(e.target.value)}
+                    className="w-24 rounded-lg px-3 py-2 border focus:outline-none"
+                    style={{
+                      background: 'var(--ivory)',
+                      borderColor: 'var(--cream)',
+                      color: 'var(--claude-black)',
+                    }}
+                    placeholder={t('settings.calibratePlaceholder')}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCalibrate}
+                    className="px-3 py-2 rounded-md text-[12px] transition-colors"
+                    style={{
+                      color: 'var(--claude-warm)',
+                      background: 'var(--cream)',
+                      boxShadow: '0 0 0 1px var(--ring-warm)',
+                    }}
+                  >
+                    {t('settings.calibrateButton')}
+                  </button>
+                </div>
+                {preferences.calibratedTokenLimit != null &&
+                  preferences.calibratedTokenLimit > 0 && (
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-xs" style={{ color: 'var(--claude-stone)' }}>
+                        {t('settings.calibrateActive', {
+                          limit: preferences.calibratedTokenLimit.toLocaleString(),
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleClearCalibration}
+                        className="text-xs underline"
+                        style={{ color: 'var(--claude-olive)' }}
+                      >
+                        {t('settings.calibrateClear')}
+                      </button>
+                    </div>
+                  )}
+              </div>
             </div>
           </div>
 
@@ -596,6 +692,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }}
               >
                 {isCheckingUpdate ? t('update.checking') : t('update.checkNow')}
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenLogs}
+                className="px-3 py-1.5 rounded-md text-[12px] transition-colors inline-flex items-center gap-1.5"
+                style={{
+                  color: 'var(--claude-warm)',
+                  background: 'var(--sand)',
+                  boxShadow: '0 0 0 1px var(--ring-warm)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--cream)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--sand)';
+                }}
+                title={t('settings.openLogsDesc')}
+              >
+                <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.75} />
+                {t('settings.openLogs')}
               </button>
               {appVersion && (
                 <span

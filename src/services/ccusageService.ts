@@ -14,12 +14,13 @@ import type {
   VelocityInfo,
 } from '../types/usage.js';
 import {
+  PLAN_LIMITS,
   calculateBurnRate as utilCalculateBurnRate,
   detectPlan as utilDetectPlan,
   getTokenLimit as utilGetTokenLimit,
-  PLAN_LIMITS,
   toISOStringLocal as utilToISOStringLocal,
 } from './ccusage-utils.js';
+import { logger } from './logger.js';
 import { ResetTimeService } from './resetTimeService.js';
 import { SessionTracker } from './sessionTracker.js';
 
@@ -109,6 +110,9 @@ export class CCUsageService {
   private currentPlan: 'Pro' | 'Max5' | 'Max20' | 'Custom' = 'Pro';
   // Custom token limit specified by the user when plan === 'Custom'
   private customTokenLimit: number | undefined = undefined;
+  // Effective limit calibrated from a /status reading. When > 0 it overrides
+  // the resolved plan limit so the displayed % tracks Claude's own /status.
+  private calibratedTokenLimit: number | undefined = undefined;
   private detectedTokenLimit: number = PLAN_LIMITS.Pro;
   // Basis for cost shown in menu bar
   private menuBarCostSource: 'today' | 'sessionWindow' = 'today';
@@ -156,7 +160,7 @@ export class CCUsageService {
     );
 
     worker.on('error', (err) => {
-      console.error('[ccusage worker] error:', err);
+      logger.error('[ccusage worker] error', err);
       // Reject everything waiting so callers unblock instead of hanging.
       for (const [, pending] of this.pendingWorkerRequests) pending.reject(err);
       this.pendingWorkerRequests.clear();
@@ -165,7 +169,7 @@ export class CCUsageService {
     worker.on('exit', (code) => {
       this.worker = null;
       if (code !== 0) {
-        console.error('[ccusage worker] exited with code', code);
+        logger.error(`[ccusage worker] exited with code ${code}`);
         for (const [, pending] of this.pendingWorkerRequests) {
           pending.reject(new Error(`Worker exited with code ${code}`));
         }
@@ -198,6 +202,30 @@ export class CCUsageService {
     return CCUsageService.instance;
   }
 
+  /**
+   * Tear down the long-lived worker thread and fail any in-flight requests.
+   * Called from the main process on app quit so the worker doesn't linger as
+   * an orphaned thread/handle. Node would reap it on process exit anyway, but
+   * explicit termination keeps shutdown deterministic and avoids the worker
+   * doing file I/O during teardown.
+   */
+  async dispose(): Promise<void> {
+    for (const [, pending] of this.pendingWorkerRequests) {
+      pending.reject(new Error('CCUsageService disposed'));
+    }
+    this.pendingWorkerRequests.clear();
+
+    const worker = this.worker;
+    this.worker = null;
+    if (worker) {
+      try {
+        await worker.terminate();
+      } catch (err) {
+        console.error('Failed to terminate ccusage worker:', err);
+      }
+    }
+  }
+
   private toISOStringLocal(date: Date): string {
     return utilToISOStringLocal(date);
   }
@@ -210,6 +238,11 @@ export class CCUsageService {
     }
     if (config.customTokenLimit !== undefined) {
       this.customTokenLimit = config.customTokenLimit;
+    }
+    if (config.calibratedTokenLimit !== undefined) {
+      // Treat 0 / negative as "cleared" so the user can un-calibrate.
+      this.calibratedTokenLimit =
+        config.calibratedTokenLimit > 0 ? config.calibratedTokenLimit : undefined;
     }
     if (config.menuBarCostSource !== undefined) {
       this.menuBarCostSource = config.menuBarCostSource;
@@ -256,8 +289,11 @@ export class CCUsageService {
       const blocks = await this.loadBlocksInWorker();
 
       if (!blocks || blocks.length === 0) {
-        console.error('No blocks data received');
-        return this.getMockStats();
+        // No session data yet (fresh install, or no recent activity). Show an
+        // honest zero state — same rationale as the catch block below. (This
+        // path previously returned fabricated demo numbers.)
+        logger.warn('No session blocks found — returning empty stats');
+        return this.getDefaultStats();
       }
 
       const stats = this.parseBlocksData(blocks);
@@ -399,8 +435,14 @@ export class CCUsageService {
     // Get tokens from active session
     const tokensUsed = this.getTotalTokensFromBlock(activeBlock);
 
-    // Resolve plan and token limit based on user selection and detected usage
-    const { plan, tokenLimit } = this.resolvePlan(blocks);
+    // Resolve plan and token limit based on user selection and detected usage.
+    // A calibrated limit (back-solved from /status) takes precedence so the
+    // percentage tracks Claude's own number; the plan name is still shown.
+    const { plan, tokenLimit: resolvedLimit } = this.resolvePlan(blocks);
+    const tokenLimit =
+      this.calibratedTokenLimit && this.calibratedTokenLimit > 0
+        ? this.calibratedTokenLimit
+        : resolvedLimit;
     this.currentPlan = plan;
     this.detectedTokenLimit = tokenLimit;
 
@@ -733,116 +775,6 @@ export class CCUsageService {
       status: this.getUsageStatus(stats.percentageUsed),
       cost,
     };
-  }
-
-  private getMockStats(): UsageStats {
-    const today = new Date().toISOString().split('T')[0];
-    const tokensUsed = Math.round(PLAN_LIMITS.Pro * 0.6);
-    const tokenLimit = PLAN_LIMITS.Pro;
-    const todayCost = 2.45;
-    const burnRate = 35;
-
-    // Create mock data for enhanced features
-    const resetInfo = this.resetTimeService.calculateResetInfo();
-    const velocity: VelocityInfo = {
-      current: burnRate,
-      average24h: 32,
-      average7d: 28,
-      trend: 'increasing',
-      trendPercent: 12.5,
-      peakHour: 14, // 2 PM
-      isAccelerating: true,
-    };
-
-    const prediction: PredictionInfo = {
-      depletionTime: new Date(Date.now() + 80 * 60 * 60 * 1000).toISOString(),
-      confidence: 85,
-      daysRemaining: 3.3,
-    };
-
-    return {
-      today: {
-        date: today,
-        totalTokens: 850,
-        totalCost: todayCost,
-        models: {
-          'claude-3-5-sonnet-20241022': { tokens: 650, cost: 1.95 },
-          'claude-3-haiku-20240307': { tokens: 200, cost: 0.5 },
-        },
-      },
-      thisWeek: this.generateMockWeekData(),
-      thisMonth: this.generateMockMonthData(),
-      burnRate, // legacy field
-      velocity,
-      prediction,
-      resetInfo,
-      predictedDepleted: prediction.depletionTime, // legacy field
-      currentPlan: 'Pro',
-      tokenLimit,
-      tokensUsed,
-      tokensRemaining: tokenLimit - tokensUsed,
-      percentageUsed: (tokensUsed / tokenLimit) * 100,
-    };
-  }
-
-  private generateMockWeekData(): DailyUsage[] {
-    const result: DailyUsage[] = [];
-    const now = new Date();
-
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateStr = date.toISOString().split('T')[0];
-      const tokens = Math.floor(Math.random() * 1000) + 200;
-      const cost = tokens * 0.003; // Mock cost calculation
-
-      result.push({
-        date: dateStr,
-        totalTokens: tokens,
-        totalCost: cost,
-        models: {
-          'claude-3-5-sonnet-20241022': {
-            tokens: Math.floor(tokens * 0.7),
-            cost: cost * 0.7,
-          },
-          'claude-3-haiku-20240307': {
-            tokens: Math.floor(tokens * 0.3),
-            cost: cost * 0.3,
-          },
-        },
-      });
-    }
-
-    return result;
-  }
-
-  private generateMockMonthData(): DailyUsage[] {
-    const result: DailyUsage[] = [];
-    const now = new Date();
-
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dateStr = date.toISOString().split('T')[0];
-      const tokens = Math.floor(Math.random() * 800) + 100;
-      const cost = tokens * 0.003;
-
-      result.push({
-        date: dateStr,
-        totalTokens: tokens,
-        totalCost: cost,
-        models: {
-          'claude-3-5-sonnet-20241022': {
-            tokens: Math.floor(tokens * 0.6),
-            cost: cost * 0.6,
-          },
-          'claude-3-haiku-20240307': {
-            tokens: Math.floor(tokens * 0.4),
-            cost: cost * 0.4,
-          },
-        },
-      });
-    }
-
-    return result;
   }
 
   private detectPlan(totalTokens: number): 'Pro' | 'Max5' | 'Max20' | 'Custom' {

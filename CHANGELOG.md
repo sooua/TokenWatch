@@ -9,6 +9,49 @@ Pre-v0.1.0 history is the CCSeva lineage ([Iamshankhadeep/ccseva](https://github
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-18
+### Added
+- **Persistent main-process log** at `~/.tokenwatch/logs/main.log`
+  (1 MB rotation). The global `uncaughtException` / `unhandledRejection`
+  handlers, startup, single-instance denials, and update/IPC errors now
+  write here — packaged GUI builds previously discarded all console
+  output. A new **Open logs** button in Settings opens the folder.
+- **`/status` calibration** for Claude usage. Plan token limits aren't
+  published, so the percentage is an estimate; entering the session %
+  from Claude Code's `/status` back-solves your real effective limit so
+  future percentages track it. Settings → Claude plan → *Calibrate
+  against /status*; clearable anytime.
+- **Status-colored tray icon** on Windows/Linux — the mark's accent
+  turns green / amber / red at the safe / warning / critical
+  thresholds (run `npm run make-tray-icons` to generate the assets;
+  falls back to the plain icon when absent).
+- **Projected 30-day cost** tile in Analytics.
+
+### Fixed
+- **No more fabricated numbers.** With no session history the dashboard
+  showed demo data ($2.45 / 850 tokens / random charts); it now renders
+  an honest zero state.
+- **Ctrl/Cmd+2 no longer opens a blank screen** — the unused `live`
+  route is gone and the number shortcuts now map to the four visible
+  tabs (1 Dashboard · 2 Analytics · 3 Terminal · 4 Settings).
+- **In-app feedback toasts are shown again.** Refresh / settings-save
+  notifications were pushed into a queue that nothing rendered; they
+  now route through the toaster.
+- **Codex context-window % was nonsensical** (cumulative session tokens
+  ÷ context window → e.g. 2890%); it now uses the latest turn's tokens,
+  clamped to 100%.
+- **Analytics summary tiles now follow the 7d/30d toggle** (were hardcoded
+  to 7 days), and the final day's X-axis label is no longer dropped on 30d.
+
+### Changed
+- **Codex session parsing moved off the main thread** (async file I/O) so
+  a large `~/.codex/sessions` archive no longer blocks the tray/UI on its
+  15-second refresh.
+- **Deterministic teardown on quit** — all timers are cleared and the
+  ccusage worker thread is terminated instead of relying on process exit.
+- Removed dead code: mock-data generators and the unused `LiveMonitoring`
+  / `NotificationSystem` components.
+
 ## [0.5.6] — 2026-04-19
 ### Added
 - **Installed version readout** next to the "Check for updates now"

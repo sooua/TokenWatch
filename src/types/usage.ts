@@ -121,6 +121,10 @@ export interface UserConfiguration {
   plan: 'Pro' | 'Max5' | 'Max20' | 'Custom' | 'auto'; // 'auto' for auto-detection
   customTokenLimit?: number; // for custom plans
   menuBarCostSource?: 'today' | 'sessionWindow'; // basis for menu bar cost display
+  // User-calibrated effective token limit, back-solved from a /status reading.
+  // When > 0 it overrides the plan limit for percentage calculations so the
+  // displayed % tracks Claude's own /status. See SettingsService.
+  calibratedTokenLimit?: number;
 }
 
 export interface SessionInfo {

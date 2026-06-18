@@ -19,6 +19,9 @@ interface CodexStats {
     reasoning_output_tokens?: number;
     total_tokens?: number;
   } | null;
+  lastTokens: {
+    total_tokens?: number;
+  } | null;
   rateLimits: {
     primary?: CodexWindow;
     secondary?: CodexWindow;
@@ -145,7 +148,12 @@ export const CodexCard: React.FC = () => {
 
   const totalTokens = stats.tokens?.total_tokens ?? 0;
   const contextWindow = stats.modelContextWindow ?? 0;
-  const contextPct = contextWindow > 0 ? (totalTokens / contextWindow) * 100 : 0;
+  // Context occupancy is the *current turn's* tokens, not the whole-session
+  // cumulative — dividing the cumulative total by the window yielded absurd
+  // percentages (e.g. 2890%). Fall back to cumulative only if last-turn data
+  // is missing, and clamp so the label never exceeds 100%.
+  const contextTokens = stats.lastTokens?.total_tokens ?? totalTokens;
+  const contextPct = contextWindow > 0 ? Math.min(100, (contextTokens / contextWindow) * 100) : 0;
 
   return (
     <Card className="bg-[var(--ivory)] border-[var(--cream)]">

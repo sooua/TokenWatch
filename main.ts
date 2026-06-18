@@ -2,10 +2,21 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen } from 'electron';
+import {
+  BrowserWindow,
+  Menu,
+  type NativeImage,
+  Tray,
+  app,
+  ipcMain,
+  nativeImage,
+  screen,
+  shell,
+} from 'electron';
 import electronUpdater from 'electron-updater';
 import { CCUsageService } from './src/services/ccusageService.js';
 import { CodexService } from './src/services/codexService.js';
+import { logger } from './src/services/logger.js';
 import { NotificationService } from './src/services/notificationService.js';
 import { SettingsService } from './src/services/settingsService.js';
 
@@ -33,20 +44,13 @@ process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
   if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED')) {
     return;
   }
-  // Log via console.error, but guard against that itself throwing.
-  try {
-    console.error('Uncaught exception:', err);
-  } catch {
-    // Nothing to do — the logging channel is gone.
-  }
+  // Persist to disk — in a packaged GUI build console output is discarded, so
+  // this is the only durable record of a main-process crash.
+  logger.error('Uncaught exception', err);
 });
 
 process.on('unhandledRejection', (reason) => {
-  try {
-    console.error('Unhandled rejection:', reason);
-  } catch {
-    /* swallow */
-  }
+  logger.error('Unhandled rejection', reason);
 });
 
 const APP_USER_MODEL_ID = 'com.tokenwatch.app';
@@ -64,9 +68,13 @@ app.setName('TokenWatch');
 // one is still hidden, which is confusing and doubles the ccusage workload.
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
+  // A second main process tried to start. Record it so the "duplicate
+  // TokenWatch.exe" question can be answered from the log instead of guesswork.
+  logger.warn(`Single-instance lock denied (pid ${process.pid}) — exiting`);
   app.quit();
   process.exit(0);
 }
+logger.info(`TokenWatch main process started (pid ${process.pid}, v${app.getVersion()})`);
 
 class TokenWatchApp {
   private tray: Tray | null = null;
@@ -79,6 +87,9 @@ class TokenWatchApp {
   private displayInterval: NodeJS.Timeout | null = null;
   private showPercentage = true;
   private cachedMenuBarData: any = null;
+  // Tray icon tinted by usage status (Windows/Linux only — macOS is text-only).
+  private trayStatus: 'safe' | 'warning' | 'critical' | null = null;
+  private trayIconCache = new Map<string, NativeImage>();
   private menuBarDisplayMode: 'percentage' | 'cost' | 'alternate' = 'alternate';
   private menuBarCostSource: 'today' | 'sessionWindow' = 'today';
   private isQuitting = false;
@@ -117,6 +128,7 @@ class TokenWatchApp {
     this.usageService.updateConfiguration({
       plan: settings.plan,
       customTokenLimit: settings.customTokenLimit,
+      calibratedTokenLimit: settings.calibratedTokenLimit,
       menuBarCostSource: settings.menuBarCostSource,
     });
 
@@ -142,6 +154,7 @@ class TokenWatchApp {
 
     app.on('before-quit', () => {
       this.isQuitting = true;
+      this.teardown();
     });
 
     app.on('activate', () => {
@@ -155,6 +168,7 @@ class TokenWatchApp {
     // shortcut/double-launch case on Windows where the first instance is
     // hidden in the tray.
     app.on('second-instance', () => {
+      logger.info('second-instance received — surfacing existing window');
       this.showWindow();
     });
   }
@@ -166,15 +180,51 @@ class TokenWatchApp {
       return nativeImage.createEmpty();
     }
 
-    const trayPng = path.join(__dirname, '..', 'assets', 'tray.png');
-    const trayIco = path.join(__dirname, '..', 'assets', 'tray.ico');
-    const preferred = isWindows && fs.existsSync(trayIco) ? trayIco : trayPng;
-
-    if (fs.existsSync(preferred)) {
+    const preferred = this.resolveTrayIconPath();
+    if (preferred) {
       return nativeImage.createFromPath(preferred);
     }
     // Last-resort fallback so the constructor doesn't crash.
     return nativeImage.createEmpty();
+  }
+
+  // Resolve the best tray icon file for a status, preferring a tinted variant
+  // (tray-<status>.ico/png) and falling back to the plain icon when the
+  // status-colored assets haven't been generated (see make-tray-status-icons).
+  private resolveTrayIconPath(status?: 'safe' | 'warning' | 'critical'): string | null {
+    const dir = path.join(__dirname, '..', 'assets');
+    const names: string[] = [];
+    if (status) {
+      if (isWindows) names.push(`tray-${status}.ico`);
+      names.push(`tray-${status}.png`);
+    }
+    if (isWindows) names.push('tray.ico');
+    names.push('tray.png');
+
+    for (const name of names) {
+      const full = path.join(dir, name);
+      if (fs.existsSync(full)) return full;
+    }
+    return null;
+  }
+
+  // Swap the tray icon to the status-tinted variant. No-op on macOS (text-only)
+  // and when the status hasn't changed, so it's cheap to call on every refresh.
+  private applyTrayStatusIcon(status: 'safe' | 'warning' | 'critical') {
+    if (isMac || !this.tray || this.trayStatus === status) return;
+    this.trayStatus = status;
+
+    const iconPath = this.resolveTrayIconPath(status);
+    if (!iconPath) return;
+
+    let img = this.trayIconCache.get(iconPath);
+    if (!img) {
+      img = nativeImage.createFromPath(iconPath);
+      this.trayIconCache.set(iconPath, img);
+    }
+    if (!img.isEmpty()) {
+      this.tray.setImage(img);
+    }
   }
 
   private createTray() {
@@ -220,7 +270,7 @@ class TokenWatchApp {
           }
           await this.settingsService
             .saveSettings({ miniHud: this.miniHudEnabled })
-            .catch((err) => console.error('Failed to persist miniHud:', err));
+            .catch((err) => logger.error('Failed to persist miniHud:', err));
           this.rebuildContextMenu();
         },
       },
@@ -259,7 +309,7 @@ class TokenWatchApp {
         this.emitProgress({ stage: 'done', message: 'Up to date' });
       }
     } catch (error) {
-      console.error('Error updating tray title:', error);
+      logger.error('Error updating tray title:', error);
       this.setTrayLabel('--');
       this.cachedMenuBarData = null;
       this.rebuildContextMenu();
@@ -370,7 +420,7 @@ class TokenWatchApp {
         // errors still fall through because updateCheckInFlight is only
         // set around checkForUpdates calls.
         if (this.updateCheckInFlight) {
-          console.error(
+          logger.error(
             'autoUpdater error during check (deferring to retry wrapper):',
             err?.message || err
           );
@@ -429,7 +479,7 @@ class TokenWatchApp {
           return;
         } catch (err) {
           lastErr = err;
-          console.error(
+          logger.error(
             `update-check attempt ${i + 1}/${backoffMs.length} failed:`,
             (err as Error)?.message || err
           );
@@ -468,7 +518,7 @@ class TokenWatchApp {
         name: 'TokenWatch',
       });
     } catch (error) {
-      console.error('Failed to update login item settings:', error);
+      logger.error('Failed to update login item settings:', error);
     }
   }
 
@@ -486,6 +536,11 @@ class TokenWatchApp {
 
   private updateTrayDisplay() {
     if (!this.cachedMenuBarData) return;
+
+    // Tint the tray icon by status (safe/warning/critical) on Windows/Linux.
+    if (this.cachedMenuBarData.status) {
+      this.applyTrayStatusIcon(this.cachedMenuBarData.status);
+    }
 
     switch (this.menuBarDisplayMode) {
       case 'percentage': {
@@ -699,7 +754,7 @@ class TokenWatchApp {
       if (!this.miniHudWindow || this.miniHudWindow.isDestroyed()) return;
       const [x, y] = this.miniHudWindow.getPosition();
       this.settingsService.saveSettings({ miniHudX: x, miniHudY: y }).catch((err) => {
-        console.error('Failed to persist mini HUD position:', err);
+        logger.error('Failed to persist mini HUD position:', err);
       });
     }, 400);
   }
@@ -754,7 +809,7 @@ class TokenWatchApp {
       try {
         await autoUpdater.downloadUpdate();
       } catch (err) {
-        console.error('update-download failed:', err);
+        logger.error('update-download failed:', err);
         this.emitUpdate({ status: 'error', error: (err as Error)?.message || String(err) });
       }
     });
@@ -769,7 +824,7 @@ class TokenWatchApp {
       this.miniHudEnabled = false;
       this.closeMiniHud();
       this.settingsService.saveSettings({ miniHud: false }).catch((err) => {
-        console.error('Failed to persist miniHud=false:', err);
+        logger.error('Failed to persist miniHud=false:', err);
       });
     });
 
@@ -777,7 +832,7 @@ class TokenWatchApp {
       try {
         return await this.usageService.getUsageStats();
       } catch (error) {
-        console.error('Error getting usage stats:', error);
+        logger.error('Error getting usage stats:', error);
         throw error;
       }
     });
@@ -786,7 +841,7 @@ class TokenWatchApp {
       try {
         return await this.codexService.getStats();
       } catch (error) {
-        console.error('Error getting codex stats:', error);
+        logger.error('Error getting codex stats:', error);
         return { installed: false } as const;
       }
     });
@@ -795,7 +850,7 @@ class TokenWatchApp {
       try {
         return this.usageService.loadPersistedStats();
       } catch (error) {
-        console.error('Error reading cached stats:', error);
+        logger.error('Error reading cached stats:', error);
         return null;
       }
     });
@@ -806,7 +861,7 @@ class TokenWatchApp {
         await this.updateTrayTitle();
         return stats;
       } catch (error) {
-        console.error('Error refreshing data:', error);
+        logger.error('Error refreshing data:', error);
         throw error;
       }
     });
@@ -826,11 +881,32 @@ class TokenWatchApp {
       return this.takeScreenshot();
     });
 
+    // Open the folder containing main.log so users can grab logs for a bug
+    // report without hunting through their home directory.
+    ipcMain.handle('open-logs-folder', async () => {
+      const logDir = path.dirname(logger.getLogPath());
+      try {
+        if (!fs.existsSync(logDir)) {
+          fs.mkdirSync(logDir, { recursive: true });
+        }
+        const result = await shell.openPath(logDir);
+        // openPath resolves with a non-empty string on failure (not a throw).
+        if (result) {
+          logger.error('Failed to open logs folder', result);
+          return { success: false, error: result };
+        }
+        return { success: true, path: logDir };
+      } catch (error) {
+        logger.error('Failed to open logs folder', error);
+        return { success: false, error: (error as Error)?.message || String(error) };
+      }
+    });
+
     ipcMain.handle('load-settings', async () => {
       try {
         return await this.settingsService.loadSettings();
       } catch (error) {
-        console.error('Error loading settings:', error);
+        logger.error('Error loading settings:', error);
         throw error;
       }
     });
@@ -842,8 +918,22 @@ class TokenWatchApp {
         this.usageService.updateConfiguration({
           plan: settings.plan,
           customTokenLimit: settings.customTokenLimit,
+          calibratedTokenLimit: settings.calibratedTokenLimit,
           menuBarCostSource: settings.menuBarCostSource,
         });
+
+        // Calibration changes the effective limit (and thus every percentage)
+        // — recompute immediately and push to the renderer so the user sees the
+        // result of their /status entry without waiting for the next poll.
+        if (settings && 'calibratedTokenLimit' in settings) {
+          await this.updateTrayTitle();
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('usage-updated');
+          }
+          if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+            this.miniHudWindow.webContents.send('usage-updated');
+          }
+        }
 
         if (
           settings.menuBarDisplayMode &&
@@ -913,10 +1003,33 @@ class TokenWatchApp {
 
         return { success: true };
       } catch (error) {
-        console.error('Error saving settings:', error);
+        logger.error('Error saving settings:', error);
         throw error;
       }
     });
+  }
+
+  // Centralized teardown so a quit (tray menu, Ctrl+Q, update-install) frees
+  // every long-lived handle deterministically instead of relying on process
+  // exit to reap them. Idempotent — safe to call from multiple quit paths.
+  private teardown() {
+    for (const t of [
+      this.updateInterval,
+      this.displayInterval,
+      this.progressTimer,
+      this.autoUpdateTimer,
+      this.miniHudSavePositionTimer,
+    ]) {
+      if (t) clearInterval(t as NodeJS.Timeout);
+    }
+    this.updateInterval = null;
+    this.displayInterval = null;
+    this.progressTimer = null;
+    this.autoUpdateTimer = null;
+    this.miniHudSavePositionTimer = null;
+
+    // Release the ccusage parsing worker thread explicitly.
+    void this.usageService.dispose();
   }
 
   private startUsagePolling() {
@@ -1037,7 +1150,7 @@ class TokenWatchApp {
         message: `Screenshot saved to ${filepath}`,
       };
     } catch (error) {
-      console.error('Screenshot error:', error);
+      logger.error('Screenshot error:', error);
       return {
         success: false,
         error: this.getScreenshotErrorMessage(error),
@@ -1075,4 +1188,4 @@ class TokenWatchApp {
 }
 
 const tokenWatchApp = new TokenWatchApp();
-tokenWatchApp.initialize().catch(console.error);
+tokenWatchApp.initialize().catch((err) => logger.error('Initialization failed', err));

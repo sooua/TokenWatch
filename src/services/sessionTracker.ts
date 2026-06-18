@@ -73,9 +73,15 @@ export class SessionTracker {
    * Convert ccusage session blocks to SessionInfo objects
    */
   private convertBlocksToSessions(blocks: CCUsageBlock[]): SessionInfo[] {
-    return blocks
-      .map((block, index) => this.convertBlockToSession(block, index))
-      .filter((session) => !session.isGap); // Filter out gap sessions
+    return (
+      blocks
+        .map((block, index) => this.convertBlockToSession(block, index))
+        .filter((session) => !session.isGap) // Filter out gap sessions
+        // Newest first — downstream code (recentSessions slice, getSessionTrend's
+        // recent-vs-older split, and the sessions[0] "ongoing" candidate) all
+        // assume descending order; ccusage returns blocks oldest-first.
+        .sort((a, b) => b.startTime.getTime() - a.startTime.getTime())
+    );
   }
 
   private convertBlockToSession(block: CCUsageBlock, index: number): SessionInfo {

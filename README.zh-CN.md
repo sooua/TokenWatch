@@ -152,6 +152,30 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSig
 | 窗口锚定 | 右上角，靠近菜单栏 | 托盘图标附近，自动限制在当前显示器范围内 |
 | 通知 | 原生通知中心 | Toast 通知（需 `AppUserModelId`，已自动设置） |
 
+## 常见问题
+
+### 为什么百分比和 Claude Code 的 `/status` 对不上？
+
+因为**它无法从本地数据精确复现**。Claude Code 的 JSONL 日志只记录每条消息的原始 token 数（`input` / `output` / `cache_read` / `cache_creation`）。`/status` 显示的百分比、剩余额度和重置时间是 Anthropic **在服务器端**算出来的（用的是未公开、按模型加权的公式和未公布的额度），只在 API 响应头里返回 —— **从不落盘**。
+
+所以 TokenWatch 用 `已用 token ÷ 套餐额度` 来估算百分比，其中：
+
+- **已用 token** 不含缓存读取（cache-read）token。在缓存密集的会话里它能占到全部 token 的 95% 以上，算进去会让数字膨胀约 10–100 倍，因此排除（它在 Anthropic 的限流里权重也远低于 1×）。
+- **套餐额度** 是社区估算值（Pro / Max5 / Max20），并非官方数字。
+
+这两点都和 Anthropic 自己的算法不同，所以原始估算值不会和 `/status` 对齐。
+
+### 怎样让百分比贴近 `/status`？
+
+使用**校准**功能（设置 → Claude 套餐 → *按 /status 校准*）：
+
+1. 在 Claude Code 里运行 `/status`，记下它显示的**当前会话百分比**。
+2. 把这个数字填进校准框，点击**校准**。
+
+TokenWatch 会反推出你真实的有效额度（`额度 = 已用 token ÷ 百分比`）并记住它，之后的百分比就会贴着 `/status` 走。这是线性拟合 —— 在你当前用量水平附近最准；随时可点**清除**恢复为估算值。
+
+> **Codex 不一样：** Codex CLI 会把官方的限流百分比（5 小时窗口与每周窗口）写进自己的会话日志，所以 Codex 卡片的百分比无需校准就已经和 `codex` 的 `/status` 一致。
+
 ## 环境要求
 
 - macOS 10.15+ **或** Windows 10/11 (x64)

@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { logger } from './logger.js';
 
 // Raw shape of Codex CLI's `token_count` event payload (the only event type
 // we care about). Codex writes these into rollout JSONL files under
@@ -33,8 +35,13 @@ interface CodexRateLimits {
 
 export interface CodexStats {
   installed: boolean;
-  // Last-seen totals from the most recent token_count event we found.
+  // Cumulative totals for the session from the most recent token_count event.
   tokens: CodexTokenUsage | null;
+  // Tokens in the most recent turn only — i.e. the current context-window
+  // occupancy. Distinct from `tokens` (whole-session cumulative); using the
+  // cumulative total against the context window produces nonsensical
+  // percentages (e.g. 2890%).
+  lastTokens: CodexTokenUsage | null;
   rateLimits: CodexRateLimits | null;
   modelContextWindow: number | null;
   lastEventAt: string | null; // ISO
@@ -70,16 +77,17 @@ export class CodexService {
       return this.cached;
     }
 
-    const stats = this.computeStats();
+    const stats = await this.computeStats();
     this.cached = stats;
     this.lastFetchedAt = now;
     return stats;
   }
 
-  private computeStats(): CodexStats {
+  private async computeStats(): Promise<CodexStats> {
     const empty: CodexStats = {
       installed: this.isInstalled(),
       tokens: null,
+      lastTokens: null,
       rateLimits: null,
       modelContextWindow: null,
       lastEventAt: null,
@@ -93,7 +101,7 @@ export class CodexService {
     // Codex writes one file per session; we want the most recent event, so
     // mtime of the file is a cheap proxy for "session currently active".
     const sessionsDir = path.join(this.codexHome, 'sessions');
-    const latest = this.findLatestJsonl(sessionsDir);
+    const latest = await this.findLatestJsonl(sessionsDir);
     if (!latest) return empty;
 
     empty.latestFile = latest.path;
@@ -102,7 +110,7 @@ export class CodexService {
     // Read the tail of the file to find the most recent token_count event.
     // These events fire after every assistant turn so the tail is
     // authoritative — no need to walk the whole history.
-    const raw = this.readTail(latest.path, 64 * 1024);
+    const raw = await this.readTail(latest.path, 64 * 1024);
     const lines = raw.split(/\r?\n/);
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i];
@@ -116,6 +124,7 @@ export class CodexService {
         ) {
           const info = parsed.payload.info;
           empty.tokens = (info.total_token_usage as CodexTokenUsage) ?? null;
+          empty.lastTokens = (info.last_token_usage as CodexTokenUsage) ?? null;
           empty.modelContextWindow =
             typeof info.model_context_window === 'number' ? info.model_context_window : null;
           empty.rateLimits = (parsed.payload.rate_limits as CodexRateLimits) ?? null;
@@ -135,27 +144,30 @@ export class CodexService {
    * mtime, plus the total number of .jsonl files encountered. Depth-limited
    * so a huge archive doesn't stall startup.
    */
-  private findLatestJsonl(
+  private async findLatestJsonl(
     dir: string
-  ): { path: string; mtimeMs: number; totalCount: number } | null {
+  ): Promise<{ path: string; mtimeMs: number; totalCount: number } | null> {
     let newest: { path: string; mtimeMs: number } | null = null;
     let totalCount = 0;
-    const walk = (d: string, depth: number) => {
+    // Async + awaited so the main process event loop stays responsive between
+    // every readdir/stat — a large session archive no longer blocks the tray,
+    // window, and IPC for the duration of the walk (runs every ~15s).
+    const walk = async (d: string, depth: number): Promise<void> => {
       if (depth > 5) return;
       let entries: fs.Dirent[];
       try {
-        entries = fs.readdirSync(d, { withFileTypes: true });
+        entries = await fsp.readdir(d, { withFileTypes: true });
       } catch {
         return;
       }
       for (const ent of entries) {
         const full = path.join(d, ent.name);
         if (ent.isDirectory()) {
-          walk(full, depth + 1);
+          await walk(full, depth + 1);
         } else if (ent.isFile() && ent.name.endsWith('.jsonl')) {
           totalCount++;
           try {
-            const st = fs.statSync(full);
+            const st = await fsp.stat(full);
             if (!newest || st.mtimeMs > newest.mtimeMs) {
               newest = { path: full, mtimeMs: st.mtimeMs };
             }
@@ -165,7 +177,7 @@ export class CodexService {
         }
       }
     };
-    walk(dir, 0);
+    await walk(dir, 0);
     if (!newest) return null;
     const found = newest as { path: string; mtimeMs: number };
     return { path: found.path, mtimeMs: found.mtimeMs, totalCount };
@@ -175,23 +187,22 @@ export class CodexService {
    * Read the last `bytes` of a file as UTF-8. Faster than loading multi-MB
    * session logs just to inspect the latest token_count event.
    */
-  private readTail(filePath: string, bytes: number): string {
+  private async readTail(filePath: string, bytes: number): Promise<string> {
+    let handle: fsp.FileHandle | null = null;
     try {
-      const fd = fs.openSync(filePath, 'r');
-      try {
-        const st = fs.fstatSync(fd);
-        const size = st.size;
-        const readFrom = Math.max(0, size - bytes);
-        const length = size - readFrom;
-        const buf = Buffer.alloc(length);
-        fs.readSync(fd, buf, 0, length, readFrom);
-        return buf.toString('utf8');
-      } finally {
-        fs.closeSync(fd);
-      }
+      handle = await fsp.open(filePath, 'r');
+      const st = await handle.stat();
+      const size = st.size;
+      const readFrom = Math.max(0, size - bytes);
+      const length = size - readFrom;
+      const buf = Buffer.alloc(length);
+      await handle.read(buf, 0, length, readFrom);
+      return buf.toString('utf8');
     } catch (err) {
-      console.error('[codex] tail read failed:', err);
+      logger.error('[codex] tail read failed', err);
       return '';
+    } finally {
+      if (handle) await handle.close().catch(() => {});
     }
   }
 }
