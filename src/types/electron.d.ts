@@ -17,6 +17,7 @@ export interface ElectronAPI {
   getUsageStats: () => Promise<any>;
   getCachedUsageStats: () => Promise<any | null>;
   getCodexStats: () => Promise<any>;
+  getProfileStats: () => Promise<any>;
   refreshData: () => Promise<any>;
   quitApp: () => Promise<void>;
   takeScreenshot: () => Promise<ScreenshotResult>;

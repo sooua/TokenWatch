@@ -6,6 +6,7 @@ const electronAPI = {
   getUsageStats: () => ipcRenderer.invoke('get-usage-stats'),
   getCachedUsageStats: () => ipcRenderer.invoke('get-cached-usage-stats'),
   getCodexStats: () => ipcRenderer.invoke('get-codex-stats'),
+  getProfileStats: () => ipcRenderer.invoke('get-profile-stats'),
   refreshData: () => ipcRenderer.invoke('refresh-data'),
   quitApp: () => ipcRenderer.invoke('quit-app'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
@@ -22,7 +23,8 @@ const electronAPI = {
     ipcRenderer.removeListener('usage-loading-progress', listener),
   // Settings methods
   loadSettings: () => ipcRenderer.invoke('load-settings'),
-  saveSettings: (settings: Record<string, unknown>) => ipcRenderer.invoke('save-settings', settings),
+  saveSettings: (settings: Record<string, unknown>) =>
+    ipcRenderer.invoke('save-settings', settings),
   // Custom window controls (we draw our own title bar).
   windowMinimize: () => ipcRenderer.invoke('window-minimize'),
   windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),

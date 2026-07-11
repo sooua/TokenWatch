@@ -1,8 +1,8 @@
-import { BarChart3, LayoutDashboard, Settings, TerminalSquare } from 'lucide-react';
+import { BarChart3, LayoutDashboard, Settings, TerminalSquare, UserRound } from 'lucide-react';
 import type React from 'react';
 import { useTranslation } from 'react-i18next';
 
-type ViewType = 'dashboard' | 'live' | 'analytics' | 'terminal' | 'settings';
+type ViewType = 'dashboard' | 'live' | 'analytics' | 'profile' | 'terminal' | 'settings';
 
 interface NavigationTabsProps {
   currentView: ViewType;
@@ -12,13 +12,14 @@ interface NavigationTabsProps {
 
 type TabDef = {
   id: ViewType;
-  tKey: 'dashboard' | 'analytics' | 'terminal' | 'settings';
+  tKey: 'dashboard' | 'analytics' | 'profile' | 'terminal' | 'settings';
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 };
 
 const tabs: TabDef[] = [
   { id: 'dashboard', tKey: 'dashboard', icon: LayoutDashboard },
   { id: 'analytics', tKey: 'analytics', icon: BarChart3 },
+  { id: 'profile', tKey: 'profile', icon: UserRound },
   { id: 'terminal', tKey: 'terminal', icon: TerminalSquare },
   { id: 'settings', tKey: 'settings', icon: Settings },
 ];

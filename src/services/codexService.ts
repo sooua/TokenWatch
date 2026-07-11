@@ -49,6 +49,21 @@ export interface CodexStats {
   latestFile: string | null;
 }
 
+/**
+ * All-time Codex usage rollup for the Profile tab. Walks every rollout JSONL
+ * once, attributing each turn's non-cached tokens to a local day, model, and
+ * reasoning effort. Non-cached (total - cached_input) keeps it comparable with
+ * the Claude breakdown, which also excludes cache reads.
+ */
+export interface CodexProfileAggregate {
+  installed: boolean;
+  totalTokens: number;
+  perDay: Record<string, number>; // local YYYY-MM-DD -> tokens
+  models: Record<string, number>; // model -> tokens
+  efforts: Record<string, number>; // reasoning effort -> turn count
+  sessionCount: number; // number of rollout files
+}
+
 export class CodexService {
   private static instance: CodexService;
   private readonly codexHome: string;
@@ -56,7 +71,10 @@ export class CodexService {
   private lastFetchedAt = 0;
   private cachedTodayModels: Record<string, { tokens: number; cost: number }> | null = null;
   private todayModelsAt = 0;
+  private cachedProfile: CodexProfileAggregate | null = null;
+  private profileAt = 0;
   private readonly CACHE_DURATION_MS = 15_000;
+  private readonly PROFILE_CACHE_MS = 60_000; // heavier full walk — cache longer
 
   constructor() {
     this.codexHome = path.join(os.homedir(), '.codex');
@@ -146,6 +164,95 @@ export class CodexService {
       }
     }
     return models;
+  }
+
+  /** Local YYYY-MM-DD for a unix-ms timestamp. */
+  private static localDateStr(ms: number): string {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** All-time rollup for the Profile tab. Cached for PROFILE_CACHE_MS. */
+  async getProfileAggregate(): Promise<CodexProfileAggregate> {
+    const now = Date.now();
+    if (this.cachedProfile && now - this.profileAt < this.PROFILE_CACHE_MS) {
+      return this.cachedProfile;
+    }
+    const result = await this.computeProfileAggregate();
+    this.cachedProfile = result;
+    this.profileAt = now;
+    return result;
+  }
+
+  private async computeProfileAggregate(): Promise<CodexProfileAggregate> {
+    const agg: CodexProfileAggregate = {
+      installed: this.isInstalled(),
+      totalTokens: 0,
+      perDay: {},
+      models: {},
+      efforts: {},
+      sessionCount: 0,
+    };
+    if (!agg.installed) return agg;
+
+    // sinceMs=0 collects every rollout file (no mtime filter).
+    const files = await this.collectRecentJsonl(path.join(this.codexHome, 'sessions'), 0);
+    agg.sessionCount = files.length;
+
+    for (const file of files) {
+      let raw: string;
+      try {
+        raw = await fsp.readFile(file, 'utf8');
+      } catch {
+        continue;
+      }
+      let currentModel = 'codex';
+      let currentEffort = 'unknown';
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line) continue;
+        let parsed: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const payload = parsed.payload as
+          | {
+              model?: string;
+              effort?: string;
+              type?: string;
+              info?: { last_token_usage?: CodexTokenUsage };
+            }
+          | undefined;
+
+        if (parsed.type === 'turn_context') {
+          if (typeof payload?.model === 'string') currentModel = payload.model;
+          if (typeof payload?.effort === 'string') currentEffort = payload.effort;
+          continue;
+        }
+        if (
+          parsed.type === 'event_msg' &&
+          payload?.type === 'token_count' &&
+          payload.info?.last_token_usage
+        ) {
+          const ts =
+            typeof parsed.timestamp === 'string' ? Date.parse(parsed.timestamp) : Number.NaN;
+          if (!Number.isFinite(ts)) continue;
+          const last = payload.info.last_token_usage;
+          const nonCached = Math.max(0, (last.total_tokens ?? 0) - (last.cached_input_tokens ?? 0));
+          if (nonCached <= 0) continue;
+          const day = CodexService.localDateStr(ts);
+          agg.perDay[day] = (agg.perDay[day] ?? 0) + nonCached;
+          agg.models[currentModel] = (agg.models[currentModel] ?? 0) + nonCached;
+          agg.efforts[currentEffort] = (agg.efforts[currentEffort] ?? 0) + 1;
+          agg.totalTokens += nonCached;
+        }
+      }
+    }
+    return agg;
   }
 
   /** Collect .jsonl files under dir whose mtime is at/after `sinceMs`. */

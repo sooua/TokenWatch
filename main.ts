@@ -18,6 +18,7 @@ import { CCUsageService } from './src/services/ccusageService.js';
 import { CodexService } from './src/services/codexService.js';
 import { logger } from './src/services/logger.js';
 import { NotificationService } from './src/services/notificationService.js';
+import { ProfileService } from './src/services/profileService.js';
 import { SettingsService } from './src/services/settingsService.js';
 
 const { autoUpdater } = electronUpdater;
@@ -101,8 +102,7 @@ class TokenWatchApp {
   private showCodexCard = false;
   private miniHudWindow: BrowserWindow | null = null;
   private miniHudEnabled = false;
-  private miniHudContent: 'percentage' | 'percentageCost' | 'percentageCostBurn' =
-    'percentageCost';
+  private miniHudContent: 'percentage' | 'percentageCost' | 'percentageCostBurn' = 'percentageCost';
   private miniHudSavePositionTimer: NodeJS.Timeout | null = null;
   private autoUpdateTimer: NodeJS.Timeout | null = null;
   private autoUpdateInitialized = false;
@@ -250,10 +250,8 @@ class TokenWatchApp {
     if (!this.tray) return;
 
     const data = this.cachedMenuBarData;
-    const pctLabel =
-      data != null ? `Usage: ${Math.round(data.percentageUsed)}%` : 'Usage: --';
-    const costLabel =
-      data != null ? `Cost: $${Number(data.cost ?? 0).toFixed(2)}` : 'Cost: --';
+    const pctLabel = data != null ? `Usage: ${Math.round(data.percentageUsed)}%` : 'Usage: --';
+    const costLabel = data != null ? `Cost: $${Number(data.cost ?? 0).toFixed(2)}` : 'Cost: --';
 
     const menu = Menu.buildFromTemplate([
       { label: pctLabel, enabled: false },
@@ -396,14 +394,11 @@ class TokenWatchApp {
         this.emitUpdate({
           status: 'available',
           version: info?.version,
-          releaseNotes:
-            typeof info?.releaseNotes === 'string' ? info.releaseNotes : undefined,
+          releaseNotes: typeof info?.releaseNotes === 'string' ? info.releaseNotes : undefined,
           releaseDate: info?.releaseDate,
         })
       );
-      autoUpdater.on('update-not-available', () =>
-        this.emitUpdate({ status: 'not-available' })
-      );
+      autoUpdater.on('update-not-available', () => this.emitUpdate({ status: 'not-available' }));
       autoUpdater.on('download-progress', (progress) =>
         this.emitUpdate({
           status: 'downloading',
@@ -850,6 +845,15 @@ class TokenWatchApp {
       }
     });
 
+    ipcMain.handle('get-profile-stats', async () => {
+      try {
+        return await ProfileService.getInstance().getProfileStats();
+      } catch (error) {
+        logger.error('Error getting profile stats:', error);
+        throw error;
+      }
+    });
+
     ipcMain.handle('get-cached-usage-stats', () => {
       try {
         return this.usageService.loadPersistedStats();
@@ -957,10 +961,7 @@ class TokenWatchApp {
           this.updateTrayDisplay();
         }
 
-        if (
-          settings.menuBarCostSource &&
-          settings.menuBarCostSource !== this.menuBarCostSource
-        ) {
+        if (settings.menuBarCostSource && settings.menuBarCostSource !== this.menuBarCostSource) {
           this.menuBarCostSource = settings.menuBarCostSource;
           await this.updateTrayTitle();
         }

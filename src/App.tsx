@@ -8,6 +8,7 @@ import { Dashboard } from './components/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoadingScreen } from './components/LoadingScreen';
 import { NavigationTabs } from './components/NavigationTabs';
+import { ProfileView } from './components/ProfileView';
 import { SettingsPanel } from './components/SettingsPanel';
 import { TerminalView } from './components/TerminalView';
 import { UpdateBanner } from './components/UpdateBanner';
@@ -16,7 +17,7 @@ import { Toaster } from './components/ui/sonner';
 import i18n, { resolveLanguage, type SupportedLanguage } from './i18n';
 import type { UsageStats } from './types/usage';
 
-type ViewType = 'dashboard' | 'live' | 'analytics' | 'terminal' | 'settings';
+type ViewType = 'dashboard' | 'live' | 'analytics' | 'profile' | 'terminal' | 'settings';
 
 interface IconButtonProps {
   onClick: () => void;
@@ -510,9 +511,13 @@ const App: React.FC = () => {
             break;
           case '3':
             event.preventDefault();
-            navigateTo('terminal');
+            navigateTo('profile');
             break;
           case '4':
+            event.preventDefault();
+            navigateTo('terminal');
+            break;
+          case '5':
             event.preventDefault();
             navigateTo('settings');
             break;
@@ -674,7 +679,7 @@ const App: React.FC = () => {
                   strokeLinecap="round"
                 />
               </svg>
-              {/* Single-line editorial lockup: title · tagline, aligned to the baseline. */}
+              {/* Editorial lockup: title only. */}
               <div className="flex items-baseline gap-2">
                 <h1
                   className="font-serif leading-none"
@@ -688,26 +693,6 @@ const App: React.FC = () => {
                 >
                   {t('app.title')}
                 </h1>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    color: 'var(--claude-stone)',
-                    fontSize: '13px',
-                    lineHeight: 1,
-                  }}
-                >
-                  ·
-                </span>
-                <p
-                  className="text-[12px] leading-none"
-                  style={{
-                    color: 'var(--claude-olive)',
-                    letterSpacing: '0.01em',
-                    margin: 0,
-                  }}
-                >
-                  {t('app.tagline')}
-                </p>
               </div>
             </div>
 
@@ -787,6 +772,8 @@ const App: React.FC = () => {
             {state.currentView === 'analytics' && (
               <Analytics stats={currentStats} preferences={state.preferences} />
             )}
+
+            {state.currentView === 'profile' && <ProfileView />}
 
             {state.currentView === 'terminal' && (
               <TerminalView

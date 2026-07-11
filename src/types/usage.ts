@@ -20,6 +20,22 @@ export interface DailyUsage {
   };
 }
 
+// Combined Claude + Codex all-time rollup powering the Profile tab.
+export interface ProfileStats {
+  totalTokens: number; // claude + codex
+  claudeTokens: number;
+  codexTokens: number;
+  peakDayTokens: number; // largest single combined day
+  currentStreak: number; // consecutive active days ending today/yesterday
+  longestStreak: number;
+  activeDays: number; // days with any tokens
+  totalSessions: number; // claude non-gap blocks + codex rollout files
+  daily: { date: string; tokens: number }[]; // combined, ascending, from first active day → today
+  models: { name: string; tokens: number; provider: 'claude' | 'codex' }[]; // desc
+  efforts: { effort: string; turns: number }[]; // codex reasoning effort, desc
+  codexInstalled: boolean;
+}
+
 export interface ResetTimeInfo {
   nextResetTime: string; // ISO string of next reset (active block's endTime)
   timeUntilReset: number; // milliseconds until reset

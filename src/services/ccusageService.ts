@@ -755,6 +755,43 @@ export class CCUsageService {
     };
   }
 
+  /**
+   * All-time per-day tokens and per-model totals for the Profile tab. Ensures
+   * a fetch has populated `historicalBlocks`, then derives daily buckets from
+   * individual entries (all history, not just this week/month). Cache-read
+   * tokens are excluded — same convention as the dashboard.
+   */
+  async getAllTimeDailyAndModels(): Promise<{
+    totalTokens: number;
+    perDay: Record<string, number>;
+    models: Record<string, number>;
+    sessionCount: number;
+  }> {
+    // Only trigger a parse if we've never parsed. Once `historicalBlocks` is
+    // populated the 30s main-process poll keeps it fresh, so the Profile tab
+    // reads it instantly instead of forcing a fresh multi-hundred-MB re-parse
+    // on every visit (the ~20s getUsageStats cache would otherwise expire
+    // between visits and re-scan the entire ~/.claude history each time).
+    if (this.historicalBlocks.length === 0) {
+      await this.getUsageStats();
+    }
+    const blocks = this.historicalBlocks;
+    const daily = this.convertBlocksToDailyUsage(blocks);
+
+    const perDay: Record<string, number> = {};
+    const models: Record<string, number> = {};
+    let totalTokens = 0;
+    for (const day of daily) {
+      perDay[day.date] = (perDay[day.date] ?? 0) + day.totalTokens;
+      totalTokens += day.totalTokens;
+      for (const [name, m] of Object.entries(day.models)) {
+        models[name] = (models[name] ?? 0) + m.tokens;
+      }
+    }
+    const sessionCount = blocks.filter((b) => !b.isGap).length;
+    return { totalTokens, perDay, models, sessionCount };
+  }
+
   async getMenuBarData(): Promise<MenuBarData> {
     const stats = await this.getUsageStats();
 
