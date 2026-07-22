@@ -172,7 +172,11 @@ When using the `ccusage` package data-loader API:
 
 1. **Use data-loader functions**: Import `loadSessionBlockData` and `loadDailyUsageData` from `ccusage/data-loader`
 2. **Handle structured data**: The API returns typed JavaScript objects, no JSON parsing needed
-3. **Separate data calls**: Make separate API calls for session and daily data to optimize performance
+3. **One pass over the JSONL corpus**: `src/workers/blockLoader.ts` reads session
+   blocks incrementally (per-file entry cache, append-only tail reads) and daily
+   usage is derived from those same entries — per-model attribution is exact, not
+   approximated. Do not add a second full-corpus call such as `loadDailyUsageData`
+   on the hot path; it doubles I/O for data we already have.
 4. **Robust error handling**: Implement `try/catch` blocks around API calls to handle missing `~/.claude` configuration
 5. **Caching strategy**: Implement 30-second caching to avoid excessive file system reads
 
