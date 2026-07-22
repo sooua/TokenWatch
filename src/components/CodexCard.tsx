@@ -40,16 +40,24 @@ const formatNumber = (n: number | undefined | null): string => {
   return n.toLocaleString();
 };
 
-const formatResetIn = (resetsAt: number | undefined): string => {
-  if (!resetsAt) return '—';
-  const msLeft = Math.max(0, resetsAt * 1000 - Date.now());
-  if (msLeft <= 0) return '<1m';
+/**
+ * Three distinct states, not one string: an elapsed window is not "about to
+ * reset". Clamping the remaining time to 0 and calling that "<1m" left the card
+ * claiming a reset was seconds away for days on end, so the caller relabels the
+ * whole row rather than just swapping the value.
+ */
+type ResetState = { kind: 'unknown' | 'expired' } | { kind: 'left'; text: string };
+
+const resetState = (resetsAt: number | undefined): ResetState => {
+  if (!resetsAt) return { kind: 'unknown' };
+  const msLeft = resetsAt * 1000 - Date.now();
+  if (msLeft <= 0) return { kind: 'expired' };
   const h = Math.floor(msLeft / (1000 * 60 * 60));
   const m = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
   const d = Math.floor(h / 24);
-  if (d > 0) return `${d}d ${h % 24}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  if (d > 0) return { kind: 'left', text: `${d}d ${h % 24}h` };
+  if (h > 0) return { kind: 'left', text: `${h}h ${m}m` };
+  return { kind: 'left', text: `${m}m` };
 };
 
 const tone = (pct: number | undefined): string => {
@@ -66,6 +74,7 @@ const WindowBar: React.FC<{
 }> = ({ label, win }) => {
   const pct = win?.used_percent ?? 0;
   const color = tone(pct);
+  const reset = resetState(win?.resets_at);
   const { t } = useTranslation();
 
   return (
@@ -94,13 +103,15 @@ const WindowBar: React.FC<{
         </div>
         <div className="text-right">
           <div className="text-[11px]" style={{ color: 'var(--claude-stone)' }}>
-            {t('codex.resetIn')}
+            {reset.kind === 'expired' ? t('codex.windowStatus') : t('codex.resetIn')}
           </div>
           <div
             className="text-[12px] mt-0.5 font-mono"
             style={{ color: 'var(--claude-olive)', fontVariantNumeric: 'tabular-nums' }}
           >
-            {formatResetIn(win?.resets_at)}
+            {reset.kind === 'left' && reset.text}
+            {reset.kind === 'expired' && t('codex.windowExpired')}
+            {reset.kind === 'unknown' && '—'}
           </div>
         </div>
       </div>
@@ -149,11 +160,15 @@ export const CodexCard: React.FC = () => {
   const totalTokens = stats.tokens?.total_tokens ?? 0;
   const contextWindow = stats.modelContextWindow ?? 0;
   // Context occupancy is the *current turn's* tokens, not the whole-session
-  // cumulative — dividing the cumulative total by the window yielded absurd
-  // percentages (e.g. 2890%). Fall back to cumulative only if last-turn data
-  // is missing, and clamp so the label never exceeds 100%.
-  const contextTokens = stats.lastTokens?.total_tokens ?? totalTokens;
-  const contextPct = contextWindow > 0 ? Math.min(100, (contextTokens / contextWindow) * 100) : 0;
+  // cumulative. Falling back to the cumulative total meant a routinely
+  // window-exceeding number got clamped into a plausible-looking "100%" —
+  // an invented figure presented as a measurement. When the CLI doesn't
+  // report last-turn usage the honest answer is to omit the percentage.
+  const contextTokens = stats.lastTokens?.total_tokens;
+  const contextPct =
+    contextTokens != null && contextWindow > 0
+      ? Math.min(100, (contextTokens / contextWindow) * 100)
+      : null;
 
   return (
     <Card className="bg-[var(--ivory)] border-[var(--cream)]">
@@ -228,7 +243,7 @@ export const CodexCard: React.FC = () => {
               }}
             >
               {formatNumber(contextWindow)}
-              {contextWindow > 0 && (
+              {contextPct != null && (
                 <span style={{ color: 'var(--claude-olive)', fontSize: '11px' }}>
                   ({contextPct.toFixed(0)}%)
                 </span>

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import type { UsageStats } from '../types/usage';
@@ -89,6 +89,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
   const [calibInput, setCalibInput] = useState('');
+  // Switching tabs unmounts this panel (App renders views conditionally), so an
+  // in-flight update check used to leave its IPC listener and 30s timer behind
+  // and fire a red "Update check failed" toast at a user who had moved on.
+  const updateCheckCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => updateCheckCleanup.current?.(), []);
 
   useEffect(() => {
     window.electronAPI
@@ -154,6 +159,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       cleanup();
     }, 30000);
 
+    updateCheckCleanup.current = cleanup;
     window.electronAPI?.updateCheck?.();
   };
 
@@ -291,8 +297,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </div>
 
                 {!stats.actualResetInfo?.nextResetTime && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
-                    <div className="text-yellow-300 text-sm">
+                  <div
+                    className="rounded-lg p-3"
+                    style={{ background: 'var(--sand)', boxShadow: '0 0 0 1px var(--cream)' }}
+                  >
+                    <div className="text-sm" style={{ color: 'var(--claude-black)' }}>
                       {t('settings.estimatedReset', {
                         value: stats.resetInfo
                           ? new Date(stats.resetInfo.nextResetTime).toLocaleString([], {
@@ -402,16 +411,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </div>
                   <input
                     type="number"
+                    aria-label={t('settings.customLimitLabel')}
                     min="1000"
                     max="1000000"
                     step="1000"
                     value={preferences.customTokenLimit || ''}
-                    onChange={(e) =>
-                      handlePreferenceChange(
-                        'customTokenLimit',
-                        Number.parseInt(e.target.value) || 0
-                      )
-                    }
+                    // Only commit a usable limit. Clearing the field used to
+                    // write 0, and a 0 limit makes every percentage 100% —
+                    // tray, dashboard and HUD all latched to "critical", with
+                    // the 0 already persisted to settings.json.
+                    onChange={(e) => {
+                      const limit = Number.parseInt(e.target.value, 10);
+                      if (Number.isFinite(limit) && limit > 0) {
+                        handlePreferenceChange('customTokenLimit', limit);
+                      }
+                    }}
                     className="w-full rounded-lg px-3 py-2 border focus:outline-none"
                     style={{
                       background: 'var(--sand)',
@@ -426,8 +440,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </div>
               )}
 
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-                <div className="text-green-300 text-sm">
+              <div
+                className="rounded-lg p-3"
+                style={{ background: 'var(--sand)', boxShadow: '0 0 0 1px var(--cream)' }}
+              >
+                <div className="text-sm" style={{ color: 'var(--claude-black)' }}>
                   {t('settings.detectedPlan', {
                     plan: stats.currentPlan,
                     limit: stats.tokenLimit?.toLocaleString() ?? '—',
@@ -451,6 +468,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label={t('settings.calibrateLabel')}
                     min="1"
                     max="100"
                     step="1"
@@ -529,8 +547,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </Select>
               </div>
 
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                <div className="text-blue-300 text-sm">
+              <div
+                className="rounded-lg p-3"
+                style={{ background: 'var(--sand)', boxShadow: '0 0 0 1px var(--cream)' }}
+              >
+                <div className="text-sm" style={{ color: 'var(--claude-black)' }}>
                   {preferences.menuBarDisplayMode === 'percentage' &&
                     t('settings.displayPercentageHint')}
                   {preferences.menuBarDisplayMode === 'cost' && t('settings.displayCostHint')}
@@ -561,8 +582,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     </SelectContent>
                   </Select>
                   <div className="text-xs mt-2" style={{ color: 'var(--claude-stone)' }}>
-                    When set to Current session window, the menu bar cost reflects the rolling
-                    5-hour session window instead of today's total.
+                    {t('settings.costBasisHint')}
                   </div>
                 </div>
               )}

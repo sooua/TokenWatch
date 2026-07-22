@@ -10,6 +10,7 @@ import {
   app,
   ipcMain,
   nativeImage,
+  powerMonitor,
   screen,
   shell,
 } from 'electron';
@@ -53,6 +54,14 @@ process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled rejection', reason);
 });
+
+/** The parts of a DailyUsage that withCodexModels reads or rewrites. */
+type CodexMergeableDay = {
+  date?: string;
+  models?: Record<string, unknown>;
+  totalTokens?: number;
+  totalCost?: number;
+};
 
 const APP_USER_MODEL_ID = 'com.tokenwatch.app';
 if (isWindows) {
@@ -128,6 +137,7 @@ class TokenWatchApp {
     this.showCodexCard = settings.showCodexCard === true;
     this.miniHudEnabled = settings.miniHud === true;
     this.miniHudContent = settings.miniHudContent || 'percentageCost';
+    this.notificationService.setLanguage(settings.language);
 
     this.usageService.updateConfiguration({
       plan: settings.plan,
@@ -566,6 +576,11 @@ class TokenWatchApp {
   }
 
   private startDisplayToggle() {
+    // Only macOS renders tray text; elsewhere setTrayLabel writes the tooltip,
+    // which is invisible unless hovered. Alternating it every 3 s was a timer
+    // that woke the process 1,200 times an hour to change nothing on screen.
+    if (!isMac) return;
+
     this.displayInterval = setInterval(() => {
       this.showPercentage = !this.showPercentage;
       this.updateTrayDisplay();
@@ -865,7 +880,9 @@ class TokenWatchApp {
 
     ipcMain.handle('refresh-data', async () => {
       try {
-        const stats = await this.usageService.getUsageStats();
+        // force=true: an explicit user refresh must not be served from the
+        // 20s freshness window.
+        const stats = await this.usageService.getUsageStats(true);
         await this.updateTrayTitle();
         return this.withCodexModels(stats);
       } catch (error) {
@@ -966,6 +983,15 @@ class TokenWatchApp {
           await this.updateTrayTitle();
         }
 
+        if (settings.language) {
+          this.notificationService.setLanguage(settings.language);
+          // The HUD is its own renderer with its own i18n instance; without
+          // this it keeps the language it started with until the app restarts.
+          if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+            this.miniHudWindow.webContents.send('mini-hud-language-changed', settings.language);
+          }
+        }
+
         if (typeof settings.launchOnStartup === 'boolean') {
           this.applyLaunchOnStartup(settings.launchOnStartup);
         }
@@ -1044,22 +1070,50 @@ class TokenWatchApp {
   // Fold today's Codex per-model usage into stats.today.models so the "by
   // model" distribution shows both agents. Returns a shallow copy — never
   // mutates the service's cached stats. Codex tokens are non-cached (see
-  // CodexService.getTodayModelUsage) to stay comparable with Claude. Per-model
-  // percentages in the UI divide by the sum of this map, so adding Codex
-  // entries keeps them consistent without touching today.totalTokens.
-  private async withCodexModels<T extends { today?: { models?: Record<string, unknown> } }>(
-    stats: T
-  ): Promise<T> {
+  // CodexService.getTodayModelUsage) to stay comparable with Claude.
+  private async withCodexModels<
+    T extends {
+      today?: CodexMergeableDay;
+      thisWeek?: CodexMergeableDay[];
+      thisMonth?: CodexMergeableDay[];
+    },
+  >(stats: T): Promise<T> {
     if (!this.showCodexCard || !stats?.today) return stats;
     try {
       const codexModels = await this.codexService.getTodayModelUsage();
       if (!codexModels || Object.keys(codexModels).length === 0) return stats;
+
+      // Codex models are merged into today's per-model map, so today's totals
+      // have to grow with them. Leaving the totals Claude-only made every
+      // per-model share use a smaller denominator than numerator — shares
+      // could read over 100% and never summed to it.
+      let addedTokens = 0;
+      let addedCost = 0;
+      for (const value of Object.values(codexModels)) {
+        const model = value as { tokens?: number; cost?: number };
+        addedTokens += model?.tokens ?? 0;
+        addedCost += model?.cost ?? 0;
+      }
+
+      const mergedToday = {
+        ...stats.today,
+        models: { ...(stats.today.models ?? {}), ...codexModels },
+        totalTokens: (stats.today.totalTokens ?? 0) + addedTokens,
+        totalCost: (stats.today.totalCost ?? 0) + addedCost,
+      };
+
+      // The weekly/monthly series carry their own copy of today. Leaving it
+      // Claude-only put two different totals for the same day on one Analytics
+      // screen: the trend chart and summary tiles disagreed with the model
+      // donut sitting 200px below them.
+      const mergeDay = (day: CodexMergeableDay) =>
+        day.date === mergedToday.date ? mergedToday : day;
+
       return {
         ...stats,
-        today: {
-          ...stats.today,
-          models: { ...(stats.today.models ?? {}), ...codexModels },
-        },
+        today: mergedToday,
+        thisWeek: stats.thisWeek?.map(mergeDay),
+        thisMonth: stats.thisMonth?.map(mergeDay),
       };
     } catch (error) {
       logger.error('Failed to merge Codex model usage', error);
@@ -1067,7 +1121,38 @@ class TokenWatchApp {
     }
   }
 
+  /**
+   * A laptop that sleeps for hours wakes up with a worker thread that has been
+   * frozen mid-flight and stats that are arbitrarily old. Recycle the read path
+   * and refresh immediately instead of waiting out the next poll tick.
+   */
+  private registerPowerHandlers() {
+    const onWake = (event: string) => {
+      void (async () => {
+        try {
+          await this.usageService.recycleWorker(`system ${event}`);
+          await this.updateTrayTitle();
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('usage-updated');
+          }
+          if (this.miniHudWindow && !this.miniHudWindow.isDestroyed()) {
+            this.miniHudWindow.webContents.send('usage-updated');
+          }
+        } catch (error) {
+          logger.error(`Failed to refresh after system ${event}`, error);
+        }
+      })();
+    };
+
+    powerMonitor.on('resume', () => onWake('resume'));
+    // Windows fires unlock-screen far more reliably than resume on some
+    // machines; both funnel into the same recovery path.
+    powerMonitor.on('unlock-screen', () => onWake('unlock-screen'));
+  }
+
   private startUsagePolling() {
+    this.registerPowerHandlers();
+
     this.updateInterval = setInterval(async () => {
       await this.updateTrayTitle();
 

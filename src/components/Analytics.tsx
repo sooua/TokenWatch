@@ -13,6 +13,7 @@ import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
+import { Metric, useDataAvailable } from './DataAvailability';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 
 interface AnalyticsProps {
@@ -94,6 +95,9 @@ function Segmented<T extends string>({
           <button
             key={v}
             type="button"
+            // Selection is otherwise carried by background/weight alone, which
+            // reaches neither a screen reader nor high-contrast mode.
+            aria-pressed={active}
             onClick={() => onChange(v)}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all text-[12px]"
             style={{
@@ -113,7 +117,7 @@ function Segmented<T extends string>({
   );
 }
 
-const SummaryTile: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const SummaryTile: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div
     className="px-3 py-3 rounded-lg"
     style={{
@@ -148,7 +152,11 @@ const useChartData = (stats: UsageStats, timeRange: ChartTimeRange) =>
   useMemo(() => {
     const rawData = timeRange === '7d' ? stats.thisWeek : stats.thisMonth;
     return rawData.map((day, index) => ({
-      shortDate: new Date(day.date).toLocaleDateString('en-US', {
+      // `day.date` is a LOCAL date string (see toISOStringLocal in
+      // CCUsageService). `new Date('2026-07-22')` parses as UTC midnight, which
+      // renders as the previous day in every negative-offset timezone — the
+      // whole axis was shifted by one. The explicit time forces local parsing.
+      shortDate: new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', {
         month: 'numeric',
         day: 'numeric',
       }),
@@ -207,8 +215,13 @@ const MainChart: React.FC<{
   timeRange: ChartTimeRange;
   dim: { width: number; height: number };
   chartRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ chartData, chartType, selectedMetric, timeRange, dim, chartRef }) => {
+}> = ({ chartData, chartType: requestedChartType, selectedMetric, timeRange, dim, chartRef }) => {
   const { t } = useTranslation();
+  const available = useDataAvailable();
+  // A one-point area/line path is a bare moveto: it strokes nothing and fills
+  // nothing, so a first-day user saw an empty plot under a "Max 412.0K" badge.
+  // The bar branch draws a single day correctly, so fall back to it.
+  const chartType = chartData.length < 2 ? 'bar' : requestedChartType;
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 1;
     const values = chartData.map((d) =>
@@ -278,10 +291,12 @@ const MainChart: React.FC<{
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {t('analytics.max', {
-              value:
-                selectedMetric === 'tokens' ? formatNumber(maxValue) : formatCurrency(maxValue),
-            })}
+            <Metric>
+              {t('analytics.max', {
+                value:
+                  selectedMetric === 'tokens' ? formatNumber(maxValue) : formatCurrency(maxValue),
+              })}
+            </Metric>
           </span>
         </div>
 
@@ -427,7 +442,9 @@ const MainChart: React.FC<{
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center" style={{ color: 'var(--claude-stone)' }}>
                 <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-40" strokeWidth={1.25} />
-                <p className="text-[13px]">{t('analytics.noData')}</p>
+                <p className="text-[13px]">
+                  {available ? t('analytics.noData') : t('app.dataUnavailableHint')}
+                </p>
               </div>
             </div>
           )}
@@ -441,7 +458,7 @@ const MainChart: React.FC<{
 
 const MetricCard: React.FC<{
   icon: React.ReactNode;
-  value: string;
+  value: React.ReactNode;
   label: string;
   detail?: string;
   badge?: { text: string; tone: 'normal' | 'warning' | 'critical' };
@@ -538,6 +555,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
   const [selectedMetric, setSelectedMetric] = useState<'tokens' | 'cost'>('tokens');
   const { dim, ref } = useChartDimensions();
 
+  const available = useDataAvailable();
   const chartData = useChartData(stats, timeRange);
   const modelBreakdown = useModelBreakdown(stats);
 
@@ -641,20 +659,23 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
           <div className="grid grid-cols-5 gap-2">
             <SummaryTile
               label={t('analytics.totalTokensRange', { range: rangeLabel })}
-              value={formatNumber(rangeTotalTokens)}
+              value={<Metric>{formatNumber(rangeTotalTokens)}</Metric>}
             />
             <SummaryTile
               label={t('analytics.totalCostRange', { range: rangeLabel })}
-              value={formatCurrency(rangeTotalCost)}
+              value={<Metric>{formatCurrency(rangeTotalCost)}</Metric>}
             />
             <SummaryTile
               label={t('analytics.avgDailyTokens')}
-              value={formatNumber(Math.round(avgDailyTokens))}
+              value={<Metric>{formatNumber(Math.round(avgDailyTokens))}</Metric>}
             />
-            <SummaryTile label={t('analytics.avgDailyCost')} value={formatCurrency(avgDailyCost)} />
+            <SummaryTile
+              label={t('analytics.avgDailyCost')}
+              value={<Metric>{formatCurrency(avgDailyCost)}</Metric>}
+            />
             <SummaryTile
               label={t('analytics.projectedMonthCost')}
-              value={formatCurrency(projectedMonthCost)}
+              value={<Metric>{formatCurrency(projectedMonthCost)}</Metric>}
             />
           </div>
         </CardContent>
@@ -753,7 +774,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {formatNumber(stats.today.totalTokens)}
+                      <Metric>{formatNumber(stats.today.totalTokens)}</Metric>
                     </div>
                     <div
                       className="text-[10px] mt-1 uppercase"
@@ -815,7 +836,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
           ) : (
             <div className="text-center py-12" style={{ color: 'var(--claude-stone)' }}>
               <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-40" strokeWidth={1.25} />
-              <p className="text-[13px]">{t('analytics.noData')}</p>
+              <p className="text-[13px]">
+                {available ? t('analytics.noData') : t('app.dataUnavailableHint')}
+              </p>
             </div>
           )}
         </CardContent>
@@ -843,10 +866,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
           <div className="grid grid-cols-2 gap-3">
             <MetricCard
               icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
-              value={formatNumber(stats.burnRate)}
+              value={<Metric>{formatNumber(stats.burnRate)}</Metric>}
               label={t('analytics.burnRateLabel')}
+              // Clamp the bar, not the number: 3x the ceiling and exactly 1x
+              // both read "100%" otherwise.
               detail={t('analytics.burnRateDetail', {
-                pct: Math.min((stats.burnRate / burnRateMax) * 100, 100).toFixed(0),
+                pct: ((stats.burnRate / burnRateMax) * 100).toFixed(0),
               })}
               badge={{
                 text:
@@ -864,23 +889,25 @@ export const Analytics: React.FC<AnalyticsProps> = ({ stats }) => {
             />
             <MetricCard
               icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}
-              value={`${stats.percentageUsed.toFixed(1)}%`}
+              value={<Metric>{`${stats.percentageUsed.toFixed(1)}%`}</Metric>}
               label={t('analytics.planUtilization')}
               detail={t('analytics.planUtilizationDetail')}
               progress={{ pct: stats.percentageUsed, tone: usageTone }}
             />
             <MetricCard
               icon={<Clock className="w-4 h-4" strokeWidth={1.75} />}
-              value={getDepletionText(stats, t)}
+              value={<Metric>{getDepletionText(stats, t)}</Metric>}
               label={t('analytics.depletion')}
               detail={t('analytics.depletionDetail')}
             />
             <MetricCard
               icon={<Coins className="w-4 h-4" strokeWidth={1.75} />}
               value={
-                stats.today.totalTokens > 0 && stats.today.totalCost > 0
-                  ? formatCurrency((stats.today.totalCost / stats.today.totalTokens) * 1000)
-                  : '$0.000'
+                <Metric>
+                  {stats.today.totalTokens > 0 && stats.today.totalCost > 0
+                    ? formatCurrency((stats.today.totalCost / stats.today.totalTokens) * 1000)
+                    : '$0.000'}
+                </Metric>
               }
               label={t('analytics.avgCost')}
               detail={t('analytics.avgCostDetail')}

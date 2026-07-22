@@ -73,16 +73,22 @@ function buildCells(
   }
 
   const end = parseDay(fmtDay(Date.now()));
-  let start = end - (weeks - 1) * 7 * DAY_MS;
-  start -= new Date(start).getDay() * DAY_MS; // align to prior Sunday
+  // Walk calendar days, not fixed 24-hour steps. A DST fall-back day is 25
+  // hours long, so `+= DAY_MS` lands at 23:00 of the *same* local date and
+  // emits it twice — a duplicate grid cell, every later column shifted by one
+  // weekday row, a React duplicate-key warning, and that day counted twice in
+  // cumulative mode. `setDate` is DST-aware.
+  const cursor = new Date(end);
+  cursor.setDate(cursor.getDate() - (weeks - 1) * 7);
+  cursor.setDate(cursor.getDate() - cursor.getDay()); // align to prior Sunday
 
   const columns: Cell[][] = [];
   const days: Cell[] = [];
   let col: Cell[] = [];
   let max = 0;
   let lastCum = 0;
-  for (let ms = start; ms <= end; ms += DAY_MS) {
-    const date = fmtDay(ms);
+  while (cursor.getTime() <= end) {
+    const date = fmtDay(cursor.getTime());
     const tokens = tokenByDate.get(date) ?? 0;
     const cum = cumByDate.get(date) ?? lastCum; // carry forward on gap days
     lastCum = cum;
@@ -91,10 +97,11 @@ function buildCells(
     const cell: Cell = { date, value, tokens, cum };
     col.push(cell);
     days.push(cell);
-    if (new Date(ms).getDay() === 6) {
+    if (cursor.getDay() === 6) {
       columns.push(col);
       col = [];
     }
+    cursor.setDate(cursor.getDate() + 1);
   }
   if (col.length) columns.push(col);
   return { columns, days, max };

@@ -16,10 +16,13 @@ export function computeStreaks(
   const set = new Set(activeDates);
   if (set.size === 0) return { current: 0, longest: 0 };
 
-  const dayMs = 24 * 60 * 60 * 1000;
-  const parse = (s: string) => new Date(`${s}T00:00:00`).getTime();
-  const fmt = (ms: number) => {
-    const d = new Date(ms);
+  // Shift by calendar days. Comparing timestamps against a fixed 24h breaks on
+  // DST boundaries: a 25-hour fall-back day made two genuinely consecutive
+  // days look non-adjacent (silently truncating the longest streak) and made
+  // the backwards walk visit the same date twice (inflating the current one).
+  const shiftDay = (day: string, delta: number): string => {
+    const d = new Date(`${day}T00:00:00`);
+    d.setDate(d.getDate() + delta);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
@@ -28,25 +31,20 @@ export function computeStreaks(
   let longest = 1;
   let run = 1;
   for (let i = 1; i < sorted.length; i++) {
-    if (parse(sorted[i]) - parse(sorted[i - 1]) === dayMs) {
-      run++;
-    } else {
-      run = 1;
-    }
+    run = sorted[i] === shiftDay(sorted[i - 1], 1) ? run + 1 : 1;
     if (run > longest) longest = run;
   }
 
   // Current: walk back from today (or yesterday) while days are present.
-  const todayMs = parse(todayStr);
-  let cursor: number;
-  if (set.has(todayStr)) cursor = todayMs;
-  else if (set.has(fmt(todayMs - dayMs))) cursor = todayMs - dayMs;
+  let cursor: string;
+  if (set.has(todayStr)) cursor = todayStr;
+  else if (set.has(shiftDay(todayStr, -1))) cursor = shiftDay(todayStr, -1);
   else return { current: 0, longest };
 
   let current = 0;
-  while (set.has(fmt(cursor))) {
+  while (set.has(cursor)) {
     current++;
-    cursor -= dayMs;
+    cursor = shiftDay(cursor, -1);
   }
   return { current, longest };
 }
@@ -99,15 +97,17 @@ export class ProfileService {
     const daily: { date: string; tokens: number }[] = [];
     let peakDayTokens = 0;
     if (dates.length > 0) {
-      const dayMs = 24 * 60 * 60 * 1000;
-      const start = new Date(`${dates[0]}T00:00:00`).getTime();
+      // Step by calendar day: adding a fixed 24h across a 25-hour DST fall-back
+      // day lands back on the same local date, so it was emitted twice and its
+      // tokens double-counted in every all-time figure.
+      const cursor = new Date(`${dates[0]}T00:00:00`);
       const end = new Date(`${todayStr}T00:00:00`).getTime();
-      for (let ms = start; ms <= end; ms += dayMs) {
-        const d = new Date(ms);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      while (cursor.getTime() <= end) {
+        const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
         const tokens = perDay[key] ?? 0;
         daily.push({ date: key, tokens });
         if (tokens > peakDayTokens) peakDayTokens = tokens;
+        cursor.setDate(cursor.getDate() + 1);
       }
     }
 
