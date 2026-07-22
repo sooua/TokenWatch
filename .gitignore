@@ -149,3 +149,7 @@ yarn.lock.bak
 .yarn/unplugged/
 .yarn/build-state.yml
 .yarn/install-state.gz
+
+# Claude Code — local overrides and runtime state
+.claude/settings.local.json
+.claude/*.lock
