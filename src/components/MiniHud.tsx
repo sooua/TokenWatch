@@ -1,7 +1,10 @@
 import { X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { resolveLanguage, type SupportedLanguage } from '../i18n';
 import type { UsageStats } from '../types/usage';
+import { DataAvailabilityProvider, Metric } from './DataAvailability';
 
 type ContentMode = 'percentage' | 'percentageCost' | 'percentageCostBurn';
 
@@ -10,6 +13,8 @@ interface HudData {
   cost: number;
   burnRate: number;
   status: 'safe' | 'warning' | 'critical';
+  /** False when the payload was a zeroed fallback rather than a real read. */
+  available: boolean;
 }
 
 // Ring color by threshold — same palette as Dashboard's circular progress.
@@ -30,10 +35,12 @@ const statsToHud = (stats: UsageStats): HudData => {
     cost: stats.today?.totalCost ?? 0,
     burnRate: stats.burnRate ?? 0,
     status: p >= 90 ? 'critical' : p >= 70 ? 'warning' : 'safe',
+    available: stats.fetchedAt != null,
   };
 };
 
 export const MiniHud: React.FC = () => {
+  const { t } = useTranslation();
   const [data, setData] = useState<HudData | null>(null);
   const [content, setContent] = useState<ContentMode>('percentageCost');
   const [hover, setHover] = useState(false);
@@ -58,9 +65,6 @@ export const MiniHud: React.FC = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      // Prefer cache for instant paint; fall back to a real fetch if no cache.
-      const cached = await window.electronAPI?.getCachedUsageStats?.();
-      if (cached) setData(statsToHud(cached));
       const fresh = await window.electronAPI?.getUsageStats?.();
       if (fresh) setData(statsToHud(fresh));
     } catch (err) {
@@ -68,7 +72,39 @@ export const MiniHud: React.FC = () => {
     }
   }, []);
 
+  // The HUD is a separate React root, so it never ran App's language sync and
+  // i18n stayed on `auto` — a user with the UI set to 中文 still got an English
+  // HUD, because 'auto' resolves against the OS locale rather than the setting.
   useEffect(() => {
+    const apply = (language: SupportedLanguage | undefined) => {
+      const next = resolveLanguage(language);
+      if (i18n.language !== next) i18n.changeLanguage(next);
+    };
+
+    window.electronAPI
+      ?.loadSettings?.()
+      .then((settings) => apply(settings?.language as SupportedLanguage))
+      .catch(() => {});
+
+    const listener = window.electronAPI?.onMiniHudLanguageChanged?.((language) =>
+      apply(language as SupportedLanguage)
+    );
+    return () => {
+      if (listener) window.electronAPI?.removeMiniHudLanguageChangedListener?.(listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    // The cached read only buys an instant first paint. Doing it on every 30s
+    // pulse cost a second IPC round-trip and a second repaint of an
+    // always-on-top window, and the two reads could resolve out of order and
+    // flash older numbers.
+    window.electronAPI
+      ?.getCachedUsageStats?.()
+      .then((cached) => {
+        if (cached) setData(statsToHud(cached));
+      })
+      .catch(() => {});
     fetchStats();
 
     window.electronAPI?.miniHudGetContent?.().then((c) => {
@@ -94,160 +130,167 @@ export const MiniHud: React.FC = () => {
     };
   }, [fetchStats]);
 
+  // A HUD pinned on top all day is the surface most likely to be believed at a
+  // glance, so a failed read must not render as a calm green 0% / $0.00.
+  const available = data?.available !== false;
   const ring = toneColor(data?.status ?? 'safe');
-  const pct = data ? Math.round(data.percentageUsed) : 0;
+  const pct = data && available ? Math.round(data.percentageUsed) : 0;
   const cost = data?.cost ?? 0;
   const burn = data?.burnRate ?? 0;
 
   return (
-    <div
-      // Fills the whole frameless window. Drag region lets users pull it
-      // around; interactive controls explicitly opt out below.
-      className="w-screen h-screen flex items-center px-3 gap-3"
-      style={
-        {
-          background: 'var(--ivory)',
-          border: '1px solid var(--cream)',
-          borderRadius: 12,
-          boxShadow: 'var(--shadow-whisper-md)',
-          color: 'var(--claude-black)',
-          WebkitAppRegion: 'drag',
-          cursor: 'grab',
-          overflow: 'hidden',
-        } as React.CSSProperties
-      }
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      {/* Percentage ring + number */}
-      <button
-        type="button"
-        onClick={() => window.electronAPI?.miniHudOpenMain?.()}
-        title="Open TokenWatch"
-        className="flex items-center gap-2 flex-shrink-0"
+    <DataAvailabilityProvider available={available}>
+      <div
+        // Fills the whole frameless window. Drag region lets users pull it
+        // around; interactive controls explicitly opt out below.
+        className="w-screen h-screen flex items-center px-3 gap-3"
         style={
           {
-            WebkitAppRegion: 'no-drag',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
+            background: 'var(--ivory)',
+            border: '1px solid var(--cream)',
+            borderRadius: 12,
+            boxShadow: 'var(--shadow-whisper-md)',
+            color: 'var(--claude-black)',
+            WebkitAppRegion: 'drag',
+            cursor: 'grab',
+            overflow: 'hidden',
           } as React.CSSProperties
         }
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
       >
-        <div className="relative" style={{ width: 36, height: 36 }}>
-          <svg width="36" height="36" className="transform -rotate-90">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="var(--sand)" strokeWidth="3" />
-            <circle
-              cx="18"
-              cy="18"
-              r="14"
-              fill="none"
-              stroke={ring}
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 14}`}
-              strokeDashoffset={`${2 * Math.PI * 14 * (1 - pct / 100)}`}
-              style={{ transition: 'stroke-dashoffset 0.6s ease' }}
-            />
-          </svg>
-          <div
-            className="absolute inset-0 flex items-center justify-center font-serif"
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              letterSpacing: '-0.02em',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {pct}
-          </div>
-        </div>
-      </button>
-
-      {/* Numeric readouts */}
-      <div className="flex-1 min-w-0 flex flex-col justify-center" style={{ lineHeight: 1.15 }}>
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className="font-serif"
-            style={{
-              color: 'var(--claude-black)',
-              fontSize: 15,
-              fontWeight: 500,
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '-0.01em',
-            }}
-          >
-            {pct}
-            <span style={{ color: 'var(--claude-olive)', fontSize: 11, marginLeft: 1 }}>%</span>
-          </span>
-          {content !== 'percentage' && (
-            <span
-              className="font-serif"
-              style={{
-                color: 'var(--claude-charcoal)',
-                fontSize: 13,
-                fontWeight: 500,
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '-0.005em',
-              }}
-            >
-              ${cost.toFixed(2)}
-            </span>
-          )}
-        </div>
-        {content === 'percentageCostBurn' && (
-          <div
-            className="text-[10px] mt-0.5 truncate"
-            style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
-          >
-            {formatNumber(burn)} tok/hr
-          </div>
-        )}
-        {content === 'percentageCost' && (
-          <div
-            className="text-[10px] mt-0.5 truncate"
-            style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
-          >
-            today
-          </div>
-        )}
-      </div>
-
-      {/* Close button — only visible on hover to keep the HUD minimal */}
-      {hover && (
+        {/* Percentage ring + number */}
         <button
           type="button"
-          aria-label="Close mini HUD"
-          title="Close mini HUD"
-          onClick={() => window.electronAPI?.miniHudClose?.()}
+          onClick={() => window.electronAPI?.miniHudOpenMain?.()}
+          title={t('miniHud.openMain')}
+          className="flex items-center gap-2 flex-shrink-0"
           style={
             {
               WebkitAppRegion: 'no-drag',
-              width: 20,
-              height: 20,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 4,
-              color: 'var(--claude-olive)',
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
+              padding: 0,
             } as React.CSSProperties
           }
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--cream)';
-            e.currentTarget.style.color = 'var(--claude-black)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--claude-olive)';
-          }}
         >
-          <X className="w-3 h-3" strokeWidth={2} />
+          <div className="relative" style={{ width: 36, height: 36 }}>
+            <svg width="36" height="36" className="transform -rotate-90">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="var(--sand)" strokeWidth="3" />
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke={ring}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 14}`}
+                strokeDashoffset={`${2 * Math.PI * 14 * (1 - pct / 100)}`}
+                style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+              />
+            </svg>
+            <div
+              className="absolute inset-0 flex items-center justify-center font-serif"
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                letterSpacing: '-0.02em',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              <Metric>{pct}</Metric>
+            </div>
+          </div>
         </button>
-      )}
-    </div>
+
+        {/* Numeric readouts */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center" style={{ lineHeight: 1.15 }}>
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className="font-serif"
+              style={{
+                color: 'var(--claude-black)',
+                fontSize: 15,
+                fontWeight: 500,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              <Metric>
+                {pct}
+                <span style={{ color: 'var(--claude-olive)', fontSize: 11, marginLeft: 1 }}>%</span>
+              </Metric>
+            </span>
+            {content !== 'percentage' && (
+              <span
+                className="font-serif"
+                style={{
+                  color: 'var(--claude-charcoal)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  letterSpacing: '-0.005em',
+                }}
+              >
+                <Metric>${cost.toFixed(2)}</Metric>
+              </span>
+            )}
+          </div>
+          {content === 'percentageCostBurn' && (
+            <div
+              className="text-[10px] mt-0.5 truncate"
+              style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+            >
+              <Metric>{t('miniHud.tokensPerHour', { value: formatNumber(burn) })}</Metric>
+            </div>
+          )}
+          {content === 'percentageCost' && (
+            <div
+              className="text-[10px] mt-0.5 truncate"
+              style={{ color: 'var(--claude-stone)', letterSpacing: '0.02em' }}
+            >
+              {t('miniHud.today')}
+            </div>
+          )}
+        </div>
+
+        {/* Close button — only visible on hover to keep the HUD minimal */}
+        {hover && (
+          <button
+            type="button"
+            aria-label="Close mini HUD"
+            title="Close mini HUD"
+            onClick={() => window.electronAPI?.miniHudClose?.()}
+            style={
+              {
+                WebkitAppRegion: 'no-drag',
+                width: 20,
+                height: 20,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                color: 'var(--claude-olive)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+              } as React.CSSProperties
+            }
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--cream)';
+              e.currentTarget.style.color = 'var(--claude-black)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--claude-olive)';
+            }}
+          >
+            <X className="w-3 h-3" strokeWidth={2} />
+          </button>
+        )}
+      </div>
+    </DataAvailabilityProvider>
   );
 };

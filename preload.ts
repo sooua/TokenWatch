@@ -48,6 +48,13 @@ const electronAPI = {
   },
   removeMiniHudContentChangedListener: (listener: (...args: unknown[]) => void) =>
     ipcRenderer.removeListener('mini-hud-content-changed', listener),
+  onMiniHudLanguageChanged: (callback: (language: string) => void) => {
+    const listener = (_event: unknown, language: string) => callback(language);
+    ipcRenderer.on('mini-hud-language-changed', listener);
+    return listener;
+  },
+  removeMiniHudLanguageChangedListener: (listener: (...args: unknown[]) => void) =>
+    ipcRenderer.removeListener('mini-hud-language-changed', listener),
   // Auto-update
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   updateCheck: () => ipcRenderer.invoke('update-check'),

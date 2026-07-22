@@ -20,6 +20,11 @@ export const en = {
     quit: 'Quit TokenWatch (⌘Q)',
     quitAria: 'Quit',
     refreshing: 'Refreshing…',
+    updatedJustNow: 'Updated just now',
+    updatedMinutesAgo: 'Updated {{count}}m ago',
+    updatedHoursAgo: 'Updated {{count}}h ago',
+    dataUnavailable: 'No data',
+    dataUnavailableHint: 'Usage data could not be read — these numbers are unavailable, not zero',
     tryAgain: 'Try Again',
     connectionError: 'Connection Error',
     minimize: 'Minimize',
@@ -241,6 +246,8 @@ export const en = {
     primary5h: 'Primary · 5h',
     secondary7d: 'Secondary · 7d',
     resetIn: 'resets in',
+    windowStatus: 'window',
+    windowExpired: 'expired',
     lastSessionTokens: 'Last session tokens',
     contextWindow: 'Context window',
     sessions: 'Sessions',
@@ -293,6 +300,21 @@ export const en = {
     checking: 'Checking for updates…',
     upToDate: 'You are on the latest version',
     currentVersion: 'Currently installed version',
+  },
+  // System notifications. Rendered by the main process, which has no
+  // react-i18next — see NotificationService, which reads these tables directly
+  // and does its own `{{var}}` substitution.
+  miniHud: {
+    today: 'today',
+    tokensPerHour: '{{value}} tok/hr',
+    openMain: 'Open TokenWatch',
+    close: 'Close mini HUD',
+  },
+  notifications: {
+    criticalTitle: 'TokenWatch: Usage critical',
+    criticalBody: "You've used {{percent}}% of your tokens. Consider upgrading your plan.",
+    warningTitle: 'TokenWatch: Usage warning',
+    warningBody: "You've used {{percent}}% of your tokens. Monitor your usage carefully.",
   },
 };
 
