@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PLAN_LIMITS } from '../services/ccusage-utils';
 import type { UsageStats } from '../types/usage';
+import { Metric, useDataAvailable } from './DataAvailability';
 
 interface TerminalViewProps {
   stats: UsageStats;
@@ -33,6 +34,7 @@ const generateBar = (percentage: number, width = 22): string => {
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, preferences }) => {
   const { t } = useTranslation();
+  const available = useDataAvailable();
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
 
   useEffect(() => {
@@ -125,20 +127,25 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
         <div className="flex items-center gap-3">
           <span style={{ color: '#87867f' }}>token_usage</span>
           <span style={{ color: '#faf9f5' }}>
-            <span className="font-serif" style={{ fontSize: '18px', fontWeight: 500 }}>
-              {animatedPercentage.toFixed(1)}
-            </span>
-            <span style={{ color: '#b0aea5' }}>%</span>
+            <Metric>
+              <span className="font-serif" style={{ fontSize: '18px', fontWeight: 500 }}>
+                {animatedPercentage.toFixed(1)}
+              </span>
+              <span style={{ color: '#b0aea5' }}>%</span>
+            </Metric>
           </span>
         </div>
         <div className="flex items-center gap-3 text-[12px]">
           <span style={{ color: '#5e5d59' }}>[</span>
+          {/* An all-empty bar looks like a fresh window, so draw a dashed one. */}
           <span style={{ color: statusTone.color, letterSpacing: '-0.02em' }}>
-            {generateBar(animatedPercentage)}
+            {available ? generateBar(animatedPercentage) : '─'.repeat(22)}
           </span>
           <span style={{ color: '#5e5d59' }}>]</span>
           <span style={{ color: '#87867f', fontVariantNumeric: 'tabular-nums' }}>
-            {formatNumber(stats.tokensUsed)} / {formatNumber(stats.tokenLimit)}
+            <Metric>
+              {formatNumber(stats.tokensUsed)} / {formatNumber(stats.tokenLimit)}
+            </Metric>
           </span>
         </div>
       </div>
@@ -148,10 +155,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
         className="grid grid-cols-2 gap-x-6 gap-y-3 pt-3"
         style={{ borderTop: '1px solid #30302e' }}
       >
-        <Row label="burn_rate" value={`${formatNumber(stats.burnRate)} tok/hr`} />
+        <Row
+          label="burn_rate"
+          value={<Metric>{`${formatNumber(stats.burnRate)} tok/hr`}</Metric>}
+        />
         <Row label="plan" value={formatPlan()} />
-        <Row label="cost_today" value={`$${stats.today.totalCost.toFixed(3)}`} />
-        <Row label="remaining" value={`${formatNumber(stats.tokensRemaining)} tok`} />
+        <Row label="cost_today" value={<Metric>{`$${stats.today.totalCost.toFixed(3)}`}</Metric>} />
+        <Row
+          label="remaining"
+          value={<Metric>{`${formatNumber(stats.tokensRemaining)} tok`}</Metric>}
+        />
       </div>
 
       {/* Session tracking */}
@@ -163,11 +176,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
             <Row
               label="active_sessions"
-              value={`${stats.sessionTracking.sessionsInWindow} sessions`}
+              value={<Metric>{`${stats.sessionTracking.sessionsInWindow} sessions`}</Metric>}
             />
             <Row
               label="window_tokens"
-              value={formatNumber(stats.sessionTracking.activeWindow.totalTokens)}
+              value={
+                <Metric>{formatNumber(stats.sessionTracking.activeWindow.totalTokens)}</Metric>
+              }
             />
           </div>
         </div>
@@ -183,14 +198,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
             <div>
               <span style={{ color: '#87867f' }}>trend </span>
               <span style={{ color: velocityColor }} className="inline-flex items-center gap-1">
-                {velocityGlyph} {stats.velocity.trend}
+                <Metric>
+                  {velocityGlyph} {stats.velocity.trend}
+                </Metric>
               </span>
             </div>
             <div>
               <span style={{ color: '#87867f' }}>change </span>
               <span style={{ color: velocityColor, fontVariantNumeric: 'tabular-nums' }}>
-                {stats.velocity.trendPercent > 0 ? '+' : ''}
-                {stats.velocity.trendPercent}%
+                <Metric>
+                  {stats.velocity.trendPercent > 0 ? '+' : ''}
+                  {stats.velocity.trendPercent}%
+                </Metric>
               </span>
             </div>
           </div>
@@ -236,7 +255,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
       >
         <span>
           system{' '}
-          <span style={{ color: statusTone.color, fontWeight: 500 }}>{statusTone.label}</span>
+          <span style={{ color: statusTone.color, fontWeight: 500 }}>
+            <Metric>{statusTone.label}</Metric>
+          </span>
         </span>
         <span>
           session up {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -248,7 +269,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ stats, onRefresh, pr
 
 // Editorial key/value row inside the terminal. The label is olive-silver with
 // a trailing dot leader so eye can trace across easily.
-const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="flex items-baseline gap-2 text-[12px]">
     <span style={{ color: '#87867f' }}>{label}</span>
     <span className="flex-1" style={{ color: '#30302e', letterSpacing: '2px', minWidth: 12 }}>

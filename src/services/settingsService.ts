@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { logger } from './logger.js';
 
 export type MiniHudContent = 'percentage' | 'percentageCost' | 'percentageCostBurn';
 
@@ -31,6 +32,8 @@ export class SettingsService {
   private static instance: SettingsService;
   private settingsPath: string;
   private defaultSettings: AppSettings;
+  /** True when settings.json exists but could not be parsed — saving is unsafe. */
+  private settingsFileCorrupt = false;
 
   constructor() {
     // Create settings directory in user's home directory
@@ -78,18 +81,43 @@ export class SettingsService {
         const data = fs.readFileSync(this.settingsPath, 'utf8');
         const settings = JSON.parse(data) as Partial<AppSettings>;
 
+        this.settingsFileCorrupt = false;
+
         // Merge with defaults to ensure all required fields are present
         return {
           ...this.defaultSettings,
           ...settings,
         };
       }
+      this.settingsFileCorrupt = false;
     } catch (error) {
-      console.error('Error loading settings:', error);
+      // An unreadable settings file used to fall through to defaults in
+      // silence — and the next save then wrote those defaults back, quietly
+      // destroying the user's calibrated limit, timezone and HUD position.
+      // Keep a copy of the bad file and refuse to overwrite it until it has
+      // been dealt with.
+      this.settingsFileCorrupt = true;
+      logger.error(
+        `Settings file unreadable, falling back to defaults: ${this.settingsPath}`,
+        error
+      );
+      this.backupCorruptSettings();
     }
 
     // Return defaults if file doesn't exist or error occurred
     return this.defaultSettings;
+  }
+
+  private backupCorruptSettings(): void {
+    try {
+      const backupPath = `${this.settingsPath}.corrupt`;
+      // One backup is enough: overwriting it keeps the *latest* bad state, and
+      // the original good file (if any) is already gone by definition.
+      fs.copyFileSync(this.settingsPath, backupPath);
+      logger.warn(`Copied unreadable settings to ${backupPath}`);
+    } catch (error) {
+      logger.error('Failed to back up unreadable settings file', error);
+    }
   }
 
   async saveSettings(settings: Partial<AppSettings>): Promise<void> {
@@ -97,16 +125,28 @@ export class SettingsService {
       // Load existing settings first
       const currentSettings = await this.loadSettings();
 
+      if (this.settingsFileCorrupt) {
+        // Writing now would replace a file we could not read with defaults +
+        // this one change, losing everything else the user had configured.
+        throw new Error(
+          `Refusing to overwrite unreadable settings file (${this.settingsPath}); a copy is at ${this.settingsPath}.corrupt`
+        );
+      }
+
       // Merge with new settings
       const updatedSettings = {
         ...currentSettings,
         ...settings,
       };
 
-      // Write to file
-      fs.writeFileSync(this.settingsPath, JSON.stringify(updatedSettings, null, 2), 'utf8');
+      // Write via a temp file + rename so a crash mid-write cannot leave a
+      // truncated settings.json behind — the failure mode this method is
+      // otherwise cleaning up after.
+      const tempPath = `${this.settingsPath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(updatedSettings, null, 2), 'utf8');
+      fs.renameSync(tempPath, this.settingsPath);
     } catch (error) {
-      console.error('Error saving settings:', error);
+      logger.error('Error saving settings', error);
       throw error;
     }
   }

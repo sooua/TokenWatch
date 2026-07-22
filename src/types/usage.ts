@@ -68,6 +68,12 @@ export interface ActualResetInfo {
 }
 
 export interface UsageStats {
+  /**
+   * Epoch ms of the read these numbers came from. Undefined means the payload
+   * is a zeroed fallback rather than a real measurement — the UI must not
+   * present that as "0 tokens used".
+   */
+  fetchedAt?: number;
   today: DailyUsage;
   thisWeek: DailyUsage[];
   thisMonth: DailyUsage[];

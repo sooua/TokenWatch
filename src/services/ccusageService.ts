@@ -124,6 +124,13 @@ export class CCUsageService {
     { resolve: (blocks: SessionBlock[]) => void; reject: (err: Error) => void }
   >();
   private nextWorkerRequestId = 1;
+  /** Next worker read should drop the incremental cache and re-read from disk. */
+  private forceColdRead = false;
+  /** Consecutive fetches that returned blocks but no active one (see watchdog). */
+  private consecutiveNoActiveBlock = 0;
+  /** One recycle per no-active streak — see the watchdog in performFetch. */
+  private recycledForNoActiveStreak = false;
+  private static readonly NO_ACTIVE_BLOCK_RECYCLE_THRESHOLD = 3;
 
   constructor() {
     this.resetTimeService = ResetTimeService.getInstance();
@@ -147,7 +154,17 @@ export class CCUsageService {
 
     worker.on(
       'message',
-      (msg: { id: number; ok: boolean; blocks?: SessionBlock[]; error?: string }) => {
+      (msg: {
+        id: number;
+        ok: boolean;
+        blocks?: SessionBlock[];
+        error?: string;
+        warning?: string;
+      }) => {
+        // The worker has no console in a packaged build, so it reports
+        // degradation (fallback to the full re-parse, unreadable files) here.
+        if (msg.warning) logger.warn(`[ccusage worker] ${msg.warning}`);
+
         const pending = this.pendingWorkerRequests.get(msg.id);
         if (!pending) return;
         this.pendingWorkerRequests.delete(msg.id);
@@ -184,6 +201,8 @@ export class CCUsageService {
   private loadBlocksInWorker(): Promise<SessionBlock[]> {
     const worker = this.ensureWorker();
     const id = this.nextWorkerRequestId++;
+    const cold = this.forceColdRead;
+    this.forceColdRead = false;
     return new Promise<SessionBlock[]>((resolve, reject) => {
       this.pendingWorkerRequests.set(id, { resolve, reject });
       worker.postMessage({
@@ -191,8 +210,27 @@ export class CCUsageService {
         id,
         sessionDurationHours: 5,
         mode: 'calculate',
+        cold,
       });
     });
+  }
+
+  /**
+   * Recover from a wedged read path: throw away the worker (and with it the
+   * incremental file cache) so the next fetch re-reads everything from disk.
+   *
+   * Called on OS resume and by the no-active-block watchdog. TokenWatch is a
+   * process that runs for weeks; a read path that silently degrades has already
+   * cost a full day of zeroed dashboards once.
+   */
+  async recycleWorker(reason: string): Promise<void> {
+    logger.warn(`Recycling ccusage worker — ${reason}`);
+    this.forceColdRead = true;
+    this.cachedStats = null;
+    this.lastUpdate = 0;
+    this.consecutiveNoActiveBlock = 0;
+    this.recycledForNoActiveStreak = false;
+    await this.dispose();
   }
 
   static getInstance(): CCUsageService {
@@ -252,11 +290,16 @@ export class CCUsageService {
     this.cachedStats = null;
   }
 
-  async getUsageStats(): Promise<UsageStats> {
+  /**
+   * @param force Bypass the in-memory freshness window. The user pressing
+   *   "refresh" must actually re-read the data — returning a value up to 20s
+   *   old while the UI toasts "latest data loaded" is a lie.
+   */
+  async getUsageStats(force = false): Promise<UsageStats> {
     const now = Date.now();
 
     // Return cached data if it's still fresh
-    if (this.cachedStats && now - this.lastUpdate < this.CACHE_DURATION) {
+    if (!force && this.cachedStats && now - this.lastUpdate < this.CACHE_DURATION) {
       return this.cachedStats;
     }
 
@@ -283,9 +326,10 @@ export class CCUsageService {
       // ~/.claude/projects tree and re-parses every JSONL file — roughly
       // doubling cold-start I/O and CPU. `parseBlocksData` derives daily
       // usage from blocks (see `convertBlocksToDailyUsage`), so the extra
-      // call is redundant. Trade-off: per-model token splits become
-      // approximate (evenly divided across the models in a block) —
-      // acceptable for a monitoring dashboard.
+      // call is redundant. Per-model attribution stays exact: every entry
+      // carries its own model and cost, and daily totals are accumulated
+      // per entry — verified equal to `loadDailyUsageData`'s own
+      // modelBreakdowns across every multi-model day in a real history.
       const blocks = await this.loadBlocksInWorker();
 
       if (!blocks || blocks.length === 0) {
@@ -297,17 +341,49 @@ export class CCUsageService {
       }
 
       const stats = this.parseBlocksData(blocks);
+      stats.fetchedAt = Date.now();
 
       this.cachedStats = stats;
       this.lastUpdate = Date.now();
       this.historicalBlocks = blocks;
+
+      if (!this.currentActiveBlock) {
+        // Watchdog: a wedged read path looks exactly like "user is idle" —
+        // blocks come back, none of them active. Idle is normal and can last
+        // all night, so recycle at most ONCE per no-active streak. Recycling
+        // per threshold-hit would force a full cold re-read every ~90s on an
+        // idle machine, which is worse than the problem it guards against.
+        this.consecutiveNoActiveBlock++;
+        if (
+          !this.recycledForNoActiveStreak &&
+          this.consecutiveNoActiveBlock >= CCUsageService.NO_ACTIVE_BLOCK_RECYCLE_THRESHOLD
+        ) {
+          this.recycledForNoActiveStreak = true;
+          void this.recycleWorker(
+            `${this.consecutiveNoActiveBlock} consecutive fetches with no active block`
+          );
+        }
+      } else {
+        this.consecutiveNoActiveBlock = 0;
+        this.recycledForNoActiveStreak = false;
+      }
+
+      if (!this.currentActiveBlock) {
+        // parseBlocksData fell back to zeroed defaults because no block was
+        // active. Persisting that would overwrite the last known-good cache
+        // with zeros and make the next cold start render an empty dashboard.
+        logger.warn(
+          `No active block among ${blocks.length} blocks — returning zero stats without persisting`
+        );
+        return stats;
+      }
 
       // Persist to disk so the next cold start can render immediately.
       this.persistStatsToDisk(stats);
 
       return stats;
     } catch (error) {
-      console.error('Error fetching usage stats:', error);
+      logger.error('Error fetching usage stats', error);
       // Returning mock data here used to leak fake numbers (4,200 tokens,
       // $2.45 cost, fabricated week/month series) into the UI on transient
       // file errors. Default zeros let the renderer show an honest
@@ -402,8 +478,9 @@ export class CCUsageService {
     }
 
     if (this.selectedPlan === 'Custom') {
-      // Use custom token limit or fallback to detected limit
-      const tokenLimit = this.customTokenLimit ?? this.getMaxTokensFromBlocks(blocks);
+      // `||`, not `??`: a stored 0 (or a negative) is not a limit, and dividing
+      // by it turns every percentage into 100%. Fall back to detection instead.
+      const tokenLimit = this.customTokenLimit || this.getMaxTokensFromBlocks(blocks);
       return {
         plan: 'Custom',
         tokenLimit,

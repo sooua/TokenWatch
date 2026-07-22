@@ -3,6 +3,7 @@ import type React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UsageStats } from '../types/usage';
 import { CodexCard } from './CodexCard';
+import { Metric, useDataAvailable } from './DataAvailability';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -14,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 // Uses lucide icons on a warm sand disc — no gradients, no glow.
 const StatCard: React.FC<{
   icon: React.ReactNode;
-  title: string;
+  title: React.ReactNode;
   subtitle: string;
   children: React.ReactNode;
 }> = ({ icon, title, subtitle, children }) => (
@@ -49,7 +50,7 @@ const StatCard: React.FC<{
   </Card>
 );
 
-const StatRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const StatRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="flex justify-between items-baseline">
     <span className="text-[12px]" style={{ color: 'var(--claude-olive)' }}>
       {label}
@@ -177,6 +178,7 @@ const KeyMetricsRow: React.FC<{
   const timeRemaining =
     stats.actualResetInfo?.formattedTimeRemaining || t('dashboard.noActiveSession');
 
+  const available = useDataAvailable();
   const metrics = [
     {
       value: formatNumber(stats.tokensUsed),
@@ -216,7 +218,7 @@ const KeyMetricsRow: React.FC<{
               letterSpacing: '-0.01em',
             }}
           >
-            {m.value}
+            <Metric>{m.value}</Metric>
           </div>
           <div
             className="text-[11px] mb-0.5"
@@ -224,8 +226,9 @@ const KeyMetricsRow: React.FC<{
           >
             {m.label}
           </div>
+          {/* The sub-line quotes a second figure, so it is unavailable too. */}
           <div className="text-[10px]" style={{ color: 'var(--claude-stone)' }}>
-            {m.detail}
+            {available ? m.detail : ''}
           </div>
         </div>
       ))}
@@ -245,6 +248,10 @@ const CircularProgressChart: React.FC<{
    *  reads as neutral/warm regardless of token status). */
   ringColorOverride?: string;
 }> = ({ percentage, status, label, subtitle, ringColorOverride }) => {
+  const available = useDataAvailable();
+  // A ring drawn at 0% is indistinguishable from "no usage yet", so a failed
+  // read gets an empty ring in the neutral track colour and no number at all.
+  const sweep = available ? percentage : 0;
   // subtitle is already prepared by caller (localized "safe"/"warning"/"critical")
   const ringColor =
     ringColorOverride ??
@@ -268,7 +275,7 @@ const CircularProgressChart: React.FC<{
             strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={`${2 * Math.PI * 72}`}
-            strokeDashoffset={`${2 * Math.PI * 72 * (1 - percentage / 100)}`}
+            strokeDashoffset={`${2 * Math.PI * 72 * (1 - sweep / 100)}`}
             className="transition-all duration-1000 ease-out"
           />
         </svg>
@@ -284,8 +291,10 @@ const CircularProgressChart: React.FC<{
                 letterSpacing: '-0.02em',
               }}
             >
-              {Math.round(percentage)}
-              <span style={{ fontSize: '24px', color: 'var(--claude-olive)' }}>%</span>
+              <Metric>
+                {Math.round(percentage)}
+                <span style={{ fontSize: '24px', color: 'var(--claude-olive)' }}>%</span>
+              </Metric>
             </div>
             <div
               className="text-[11px] uppercase mb-0.5"
@@ -294,7 +303,7 @@ const CircularProgressChart: React.FC<{
               {label}
             </div>
             <div className="text-[11px]" style={{ color: 'var(--claude-olive)' }}>
-              {subtitle}
+              {available ? subtitle : ''}
             </div>
           </div>
         </div>
@@ -313,6 +322,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }) => {
   const { t } = useTranslation();
+  const available = useDataAvailable();
   const { getStatusColor, getStatusIcon } = getStatusHelpers(status);
   const statusWord =
     status === 'critical'
@@ -429,7 +439,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
             subtitle={t('dashboard.plan')}
           >
             <div className="space-y-2">
-              <StatRow label={t('dashboard.dailyLimit')} value={formatNumber(stats.tokenLimit)} />
+              <StatRow
+                label={t('dashboard.dailyLimit')}
+                value={<Metric>{formatNumber(stats.tokenLimit)}</Metric>}
+              />
               <Progress value={Math.min(stats.percentageUsed, 100)} className="w-full h-[6px]" />
             </div>
           </StatCard>
@@ -445,15 +458,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
             return (
               <StatCard
                 icon={<Flame className="w-4 h-4" strokeWidth={1.75} />}
-                title={formatNumber(stats.burnRate)}
+                title={<Metric>{formatNumber(stats.burnRate)}</Metric>}
                 subtitle={t('dashboard.burnRate')}
               >
                 <div className="space-y-2">
                   <StatRow
                     label={t('dashboard.depletion')}
                     value={
-                      stats.actualResetInfo?.formattedTimeRemaining ||
-                      t('dashboard.noActiveSession')
+                      <Metric>
+                        {stats.actualResetInfo?.formattedTimeRemaining ||
+                          t('dashboard.noActiveSession')}
+                      </Metric>
                     }
                   />
                   <div
@@ -470,11 +485,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
                       letterSpacing: '0.02em',
                     }}
                   >
-                    {stats.burnRate > burnHigh
-                      ? t('dashboard.usageHigh')
-                      : stats.burnRate > burnMid
-                        ? t('dashboard.usageModerate')
-                        : t('dashboard.usageNormal')}
+                    {/* Without a reading, "normal" would be an unearned reassurance. */}
+                    {!available
+                      ? '—'
+                      : stats.burnRate > burnHigh
+                        ? t('dashboard.usageHigh')
+                        : stats.burnRate > burnMid
+                          ? t('dashboard.usageModerate')
+                          : t('dashboard.usageNormal')}
                   </div>
                 </div>
               </StatCard>
@@ -489,12 +507,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
             <div className="space-y-1.5">
               <StatRow
                 label={t('dashboard.tokens')}
-                value={stats.today.totalTokens.toLocaleString()}
+                value={<Metric>{stats.today.totalTokens.toLocaleString()}</Metric>}
               />
-              <StatRow label={t('dashboard.cost')} value={formatCurrency(stats.today.totalCost)} />
+              <StatRow
+                label={t('dashboard.cost')}
+                value={<Metric>{formatCurrency(stats.today.totalCost)}</Metric>}
+              />
               <StatRow
                 label={t('dashboard.models')}
-                value={String(Object.keys(stats.today.models).length)}
+                value={<Metric>{String(Object.keys(stats.today.models).length)}</Metric>}
               />
             </div>
           </StatCard>
@@ -507,18 +528,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
             <div className="space-y-1.5">
               <StatRow
                 label={t('dashboard.totalCost')}
-                value={formatCurrency(stats.thisWeek.reduce((s, d) => s + d.totalCost, 0))}
+                value={
+                  <Metric>
+                    {formatCurrency(stats.thisWeek.reduce((s, d) => s + d.totalCost, 0))}
+                  </Metric>
+                }
               />
               <StatRow
                 label={t('dashboard.totalTokens')}
-                value={stats.thisWeek.reduce((s, d) => s + d.totalTokens, 0).toLocaleString()}
+                value={
+                  <Metric>
+                    {stats.thisWeek.reduce((s, d) => s + d.totalTokens, 0).toLocaleString()}
+                  </Metric>
+                }
               />
               <StatRow
                 label={t('dashboard.avgDaily')}
-                value={formatCurrency(
-                  stats.thisWeek.reduce((s, d) => s + d.totalCost, 0) /
-                    Math.max(1, stats.thisWeek.length)
-                )}
+                value={
+                  <Metric>
+                    {formatCurrency(
+                      stats.thisWeek.reduce((s, d) => s + d.totalCost, 0) /
+                        Math.max(1, stats.thisWeek.length)
+                    )}
+                  </Metric>
+                }
               />
             </div>
           </StatCard>
@@ -626,7 +659,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, status, showCodex }
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <p className="text-sm">{t('dashboard.modelUsageNoData')}</p>
+                  <p className="text-sm">
+                    {available ? t('dashboard.modelUsageNoData') : t('app.dataUnavailableHint')}
+                  </p>
                 </div>
               )}
             </div>

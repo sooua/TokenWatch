@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Analytics } from './components/Analytics';
 import { Dashboard } from './components/Dashboard';
+import { DataAvailabilityProvider } from './components/DataAvailability';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoadingScreen } from './components/LoadingScreen';
 import { NavigationTabs } from './components/NavigationTabs';
@@ -191,6 +192,14 @@ const App: React.FC = () => {
   });
 
   const [isMaximized, setIsMaximized] = useState(false);
+  // Drives the "updated Xm ago" chip. Ticks on its own so the label ages even
+  // when no new stats arrive — the whole point is to expose a stalled feed.
+  const [clockTick, setClockTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setClockTick(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -546,12 +555,19 @@ const App: React.FC = () => {
     return 'safe';
   };
 
-  const formatTimeRemaining = (burnRate: number, tokensRemaining: number): string => {
-    if (burnRate <= 0) return 'Unlimited';
-    const hoursRemaining = tokensRemaining / burnRate;
-    if (hoursRemaining < 1) return `${Math.round(hoursRemaining * 60)}m remaining`;
-    if (hoursRemaining < 24) return `${Math.round(hoursRemaining)}h remaining`;
-    return `${Math.round(hoursRemaining / 24)}d remaining`;
+  // How old are the numbers on screen? `fetchedAt` is absent when the main
+  // process fell back to a zeroed payload, which must never read as "0 used".
+  const describeFreshness = (fetchedAt?: number): { label: string; unavailable: boolean } => {
+    if (fetchedAt == null) return { label: t('app.dataUnavailable'), unavailable: true };
+    const ageMs = Math.max(0, clockTick - fetchedAt);
+    const minutes = Math.floor(ageMs / 60000);
+    if (minutes < 1) return { label: t('app.updatedJustNow'), unavailable: false };
+    if (minutes < 60)
+      return { label: t('app.updatedMinutesAgo', { count: minutes }), unavailable: false };
+    return {
+      label: t('app.updatedHoursAgo', { count: Math.floor(minutes / 60) }),
+      unavailable: false,
+    };
   };
 
   // Render loading screen
@@ -613,7 +629,7 @@ const App: React.FC = () => {
   }
 
   const usageStatus = getUsageStatus(currentStats.percentageUsed);
-  const timeRemaining = formatTimeRemaining(currentStats.burnRate, currentStats.tokensRemaining);
+  const freshness = describeFreshness(currentStats.fetchedAt);
 
   return (
     <ErrorBoundary>
@@ -703,15 +719,19 @@ const App: React.FC = () => {
               className="flex items-center gap-1.5 -mt-2"
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
+              {/* Data freshness, not wall-clock time. The old chip rendered
+                  `new Date()` once per render, so it showed a frozen clock that
+                  told the user nothing about how old the numbers were. */}
               <span
                 className="px-2.5 py-1 rounded-md text-[11px] font-medium"
+                title={freshness.unavailable ? t('app.dataUnavailableHint') : undefined}
                 style={{
-                  color: 'var(--claude-olive)',
+                  color: freshness.unavailable ? 'var(--error-crimson)' : 'var(--claude-olive)',
                   background: 'var(--sand)',
                   letterSpacing: '0.02em',
                 }}
               >
-                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {freshness.label}
               </span>
 
               <IconButton
@@ -759,39 +779,44 @@ const App: React.FC = () => {
         </header>
 
         {/* Scrollable content region */}
-        <main className="flex-1 overflow-y-auto px-3 pt-4 pb-3">
-          <div className="space-y-3">
-            {state.currentView === 'dashboard' && (
-              <Dashboard
-                stats={currentStats}
-                status={usageStatus}
-                showCodex={state.preferences.showCodexCard === true}
-              />
-            )}
+        {/* Every view below draws numbers out of `currentStats`. When the read
+            failed those numbers are a zeroed placeholder, not a measurement —
+            the provider lets each value slot say so instead of printing 0. */}
+        <DataAvailabilityProvider available={!freshness.unavailable}>
+          <main className="flex-1 overflow-y-auto px-3 pt-4 pb-3">
+            <div className="space-y-3">
+              {state.currentView === 'dashboard' && (
+                <Dashboard
+                  stats={currentStats}
+                  status={usageStatus}
+                  showCodex={state.preferences.showCodexCard === true}
+                />
+              )}
 
-            {state.currentView === 'analytics' && (
-              <Analytics stats={currentStats} preferences={state.preferences} />
-            )}
+              {state.currentView === 'analytics' && (
+                <Analytics stats={currentStats} preferences={state.preferences} />
+              )}
 
-            {state.currentView === 'profile' && <ProfileView />}
+              {state.currentView === 'profile' && <ProfileView />}
 
-            {state.currentView === 'terminal' && (
-              <TerminalView
-                stats={currentStats}
-                onRefresh={refreshData}
-                preferences={state.preferences}
-              />
-            )}
+              {state.currentView === 'terminal' && (
+                <TerminalView
+                  stats={currentStats}
+                  onRefresh={refreshData}
+                  preferences={state.preferences}
+                />
+              )}
 
-            {state.currentView === 'settings' && (
-              <SettingsPanel
-                preferences={state.preferences}
-                onUpdatePreferences={updatePreferences}
-                stats={currentStats}
-              />
-            )}
-          </div>
-        </main>
+              {state.currentView === 'settings' && (
+                <SettingsPanel
+                  preferences={state.preferences}
+                  onUpdatePreferences={updatePreferences}
+                  stats={currentStats}
+                />
+              )}
+            </div>
+          </main>
+        </DataAvailabilityProvider>
       </div>
       <Toaster />
     </ErrorBoundary>

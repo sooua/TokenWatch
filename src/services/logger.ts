@@ -18,14 +18,18 @@ type LogLevel = 'info' | 'warn' | 'error';
  * imminent process exit, which rules out async/buffered writes.
  */
 class Logger {
-  private readonly logDir: string;
-  private readonly logPath: string;
   private readonly maxBytes = 1_000_000; // ~1 MB, then rotate once
   private dirEnsured = false;
 
-  constructor() {
-    this.logDir = path.join(os.homedir(), '.tokenwatch', 'logs');
-    this.logPath = path.join(this.logDir, 'main.log');
+  // Resolved lazily rather than in the constructor: this module is imported at
+  // the top of the graph, and reading os.homedir() that early breaks anything
+  // that redirects the home directory afterwards (tests, portable installs).
+  private get logDir(): string {
+    return path.join(os.homedir(), '.tokenwatch', 'logs');
+  }
+
+  private get logPath(): string {
+    return path.join(this.logDir, 'main.log');
   }
 
   private ensureDir(): void {

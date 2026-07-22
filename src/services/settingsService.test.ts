@@ -112,6 +112,33 @@ describe('SettingsService', () => {
     expect(settings.menuBarDisplayMode).toBe('alternate');
   });
 
+  it('backs up a malformed settings.json and refuses to overwrite it', async () => {
+    const tokenwatchDir = path.join(state.tempHomeDir, '.tokenwatch');
+    fs.mkdirSync(tokenwatchDir, { recursive: true });
+    const settingsPath = path.join(tokenwatchDir, 'settings.json');
+    const corrupt = '{ "calibratedTokenLimit": 30951188, not valid json';
+    fs.writeFileSync(settingsPath, corrupt, 'utf8');
+
+    const svc = new SettingsService();
+    await svc.loadSettings();
+
+    // The unreadable file is preserved, both in place and as a copy.
+    expect(fs.readFileSync(`${settingsPath}.corrupt`, 'utf8')).toBe(corrupt);
+    await expect(svc.saveSettings({ plan: 'Max20' })).rejects.toThrow(/Refusing to overwrite/);
+    expect(fs.readFileSync(settingsPath, 'utf8')).toBe(corrupt);
+  });
+
+  it('saves normally again once the file is readable', async () => {
+    const svc = new SettingsService();
+    await svc.saveSettings({ plan: 'Max20', calibratedTokenLimit: 30951188 });
+
+    const reloaded = await svc.loadSettings();
+    expect(reloaded.plan).toBe('Max20');
+    expect(reloaded.calibratedTokenLimit).toBe(30951188);
+    // No temp file left behind by the atomic write.
+    expect(fs.existsSync(`${svc.getSettingsPath()}.tmp`)).toBe(false);
+  });
+
   it('exposes the resolved settings path for diagnostics', () => {
     const svc = new SettingsService();
     const p = svc.getSettingsPath();
